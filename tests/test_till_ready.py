@@ -34,8 +34,15 @@ const L={};function emit(c){const o=load()[c]||{};(L[c]||[]).forEach(cb=>cb({doc
 const db={collection:c=>({doc:id=>({set:async x=>{const o=load();o[c]=o[c]||{};o[c][id]=JSON.parse(JSON.stringify(x));save(o);setTimeout(()=>emit(c),0)},
   delete:async()=>{const o=load();if(o[c])delete o[c][id];save(o);setTimeout(()=>emit(c),0)}}),
   onSnapshot:(cb,err)=>{if(c==='shops'&&window.__failShops){setTimeout(()=>err({code:'unavailable'}),0);return ()=>{}}(L[c]=L[c]||[]).push(cb);setTimeout(()=>emit(c),0);return ()=>{}}})};
-window.claude={use:async n=>{if(n==='db')return db;throw {code:'not_granted'}}};})();
+const downloads={save:async({filename,data})=>{window.__saves=(window.__saves||[]).concat([filename]);
+  if(window.__declineSaves)throw {code:'declined'};
+  const url=typeof data==='string'?'data:application/json;charset=utf-8,'+encodeURIComponent(data):URL.createObjectURL(data);
+  const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();return {status:'saved'}}};
+window.claude={use:async n=>{if(n==='db')return db;if(n==='downloads')return downloads;throw {code:'not_granted'}}};})();
 """
+def confirm_img(pg):
+    pg.wait_for_timeout(300)
+    if pg.locator('#dImgYes').is_visible(): pg.click('#dImgYes')
 def decode(path): return [x.text for x in zxingcpp.read_barcodes(cv2.imread(path))]
 def run(mode):
     INIT = "window.__tillTest=1;localStorage.setItem('tillready.dlcheck','1');"
@@ -102,14 +109,22 @@ def run(mode):
         # saved picture only recorded after "It's saved"
         open_by('1000 More Points')
         with pg.expect_download(): pg.click('#dSaveImg')
-        check(tag+'not confirmed before tap', not pg.evaluate("__tr.vouchers.find(x=>x.id==='mp').imageSaved"))
+        pg.wait_for_timeout(300)
+        if mode == 'db': check(tag+'platform save marks the picture saved', pg.evaluate("__tr.vouchers.find(x=>x.id==='mp').imageSaved===true") and not vis('#dImgAsk'))
+        else: check(tag+'not confirmed before tap', not pg.evaluate("__tr.vouchers.find(x=>x.id==='mp').imageSaved"))
         check(tag+'file name tracked from the start', pg.evaluate("(__tr.vouchers.find(x=>x.id==='mp').imageFiles||[]).length") >= 1)
         check(tag+'preview picture present for long-press', pg.evaluate("!!document.getElementById('dImg').getAttribute('src')") and vis('#dImg'))
-        pg.click('#dImgNo'); check(tag+'it-didn\'t-save shows help', vis('#dImgHelp'))
-        pg.click('#dImgYes'); pg.wait_for_timeout(300)
+        if mode == 'local': pg.click('#dImgNo'); check(tag+'it-didn\'t-save shows help', vis('#dImgHelp'))
+        confirm_img(pg); pg.wait_for_timeout(300)
         check(tag+'recorded after confirm', pg.evaluate("__tr.vouchers.find(x=>x.id==='mp').imageSaved===true&&__tr.vouchers.find(x=>x.id==='mp').imageFiles.length>=1"))
         pg.click('#dClose'); check(tag+'closing clears the picture', not pg.evaluate("!!document.getElementById('dImg').getAttribute('src')"))
         open_by('1000 More Points'); pg.click('#dDel'); check(tag+'delete asks to delete picture first', 'till-ready-morrisons' in pg.inner_text('#dDelMsg'), pg.inner_text('#dDelMsg')); pg.click('#dDelNo'); pg.click('#dClose')
+        if mode == 'db':
+            pg.evaluate("window.__declineSaves=1"); open_by('£3 off £30') if False else None
+            open_by('1000 More Points'); pg.click('#dSaveImg'); pg.wait_for_timeout(500)
+            check(tag+'declined save shows the long-press help', vis('#dImgHelp'))
+            check(tag+'declined save used the platform', any(x.endswith('.png') for x in pg.evaluate("window.__saves||[]")))
+            pg.evaluate("window.__declineSaves=0"); pg.click('#dClose')
         # --- reminders: boundaries ---
         def slots(exp, now):
             return pg.evaluate(f"(()=>{{window.__tillNow='{now}';return __tr.reminderSlots({{expires:'{exp}'}}).map(s=>s.label.split(' · ')[0]+'@'+s.when.toISOString())}})()")
@@ -127,9 +142,11 @@ def run(mode):
         open_by('1000 More Points'); pg.click('#dRemindBtn'); pg.wait_for_timeout(200)
         hrefs = pg.locator('#dCalLinks a').evaluate_all("a=>a.map(x=>x.href)")
         check(tag+'calendar links hold no voucher number', all('1234567890128' not in h for h in hrefs) and len(hrefs) >= 1, hrefs)
-        with pg.expect_download() as dl: pg.click('#dIcs')
-        dl.value.save_as(f'{OUT}/{mode}_r.ics'); ics = open(f'{OUT}/{mode}_r.ics').read()
-        check(tag+'ics has no voucher id or number', 'mp-' not in ics and '1234567890128' not in ics and ics.count('BEGIN:VEVENT') == len(hrefs), ics[:200])
+        if mode == 'local':
+            with pg.expect_download() as dl: pg.click('#dIcs')
+            dl.value.save_as(f'{OUT}/{mode}_r.ics'); ics = open(f'{OUT}/{mode}_r.ics').read()
+            check(tag+'ics has no voucher id or number', 'mp-' not in ics and '1234567890128' not in ics and ics.count('BEGIN:VEVENT') == len(hrefs), ics[:200])
+        else: check(tag+'calendar file hidden inside Claude (platform doesn\'t allow .ics)', not vis('#dIcs'))
         pg.click('#dCalDone'); pg.wait_for_timeout(300); pg.click('#dClose')
         # editing expiry resets reminder
         pg.evaluate(f"(async()=>{{}})()")
@@ -187,14 +204,14 @@ def run(mode):
         # --- edited voucher makes its picture stale ---
         open_by('Different barcode type')
         with pg.expect_download(): pg.click('#dSaveImg')
-        pg.click('#dImgYes'); pg.wait_for_timeout(300); pg.click('#dEdit'); pg.wait_for_timeout(200)
+        confirm_img(pg); pg.wait_for_timeout(300); pg.click('#dEdit'); pg.wait_for_timeout(200)
         pg.fill('#fOffer', 'Different barcode type (edited)'); pg.locator('#form button[type=submit]').last.click(); pg.wait_for_timeout(600)
         if vis('#detail'): pg.click('#dClose')
         check(tag+'edited voucher picture listed for clean-up', pg.evaluate("(__tr.vouchers.find(x=>x.id==='fm').staleFiles||[]).length===1") and 'Morrisons' in pg.inner_text('#cleanList'))
         old_name = pg.evaluate("__tr.vouchers.find(x=>x.id==='fm').staleFiles[0]")
         open_by('Different barcode type (edited)')
         with pg.expect_download(): pg.click('#dSaveImg')
-        pg.click('#dImgYes'); pg.wait_for_timeout(300); pg.click('#dClose')
+        confirm_img(pg); pg.wait_for_timeout(300); pg.click('#dClose')
         check(tag+'re-saving keeps the old picture in clean-up', old_name in pg.inner_text('#cleanList'), pg.inner_text('#cleanList'))
         # pending picture after the voucher changes elsewhere
         open_by('Different barcode type (edited)')
@@ -207,7 +224,7 @@ def run(mode):
         # --- cleanup list after use ---
         open_by('1000 More Points')
         with pg.expect_download(): pg.click('#dSaveImg')
-        pg.click('#dImgYes'); pg.wait_for_timeout(300); pg.click('#dClose')
+        confirm_img(pg); pg.wait_for_timeout(300); pg.click('#dClose')
         pg.evaluate("(async()=>{const v=__tr.vouchers.find(x=>x.id==='mp');await __tr.persist(Object.assign({},v,{used:true,usedAt:__tr.todayISO()}))})()"); pg.wait_for_timeout(500)
         check(tag+'cleanup panel lists used voucher picture', vis('#cleanPanel') and 'Morrisons' in pg.inner_text('#cleanList'))
         pg.locator('#cleanList [data-clean]').first.click(); pg.wait_for_timeout(400)
@@ -215,8 +232,10 @@ def run(mode):
         # --- backup and restore into a fresh "phone" ---
         with pg.expect_download() as dl: pg.click('#bkBtn')
         dl.value.save_as(f'{OUT}/{mode}_backup.json'); bk = json.load(open(f'{OUT}/{mode}_backup.json'))
-        check(tag+'backup date not recorded until confirmed', 'Last backup: never' in pg.inner_text('#storeNote'))
-        pg.click('#bkYes'); pg.wait_for_timeout(300)
+        if mode == 'local':
+            check(tag+'backup date not recorded until confirmed', 'Last backup: never' in pg.inner_text('#storeNote'))
+            pg.click('#bkYes')
+        pg.wait_for_timeout(400)
         check(tag+'backup has vouchers and shop records', len(bk['vouchers']) == len(SEED)+1 and len(bk['shops']) >= 2, (len(bk['vouchers']), len(bk['shops'])))
         check(tag+'last backup shown', 'Last backup: never' not in pg.inner_text('#storeNote'))
         pg.screenshot(path=f'{OUT}/{mode}_wallet.png', full_page=True)
@@ -258,7 +277,9 @@ def run(mode):
         p3.click('#dlNo'); check(tag+'not now saves nothing', not p3.locator('#bkPanel').is_visible())
         p3.click('#bkBtn'); p3.wait_for_timeout(200)
         with p3.expect_download(): p3.click('#dlOk')
-        check(tag+'after the check, backup goes ahead', p3.locator('#bkPanel').is_visible())
+        p3.wait_for_timeout(400)
+        if mode == 'local': check(tag+'after the check, backup goes ahead', p3.locator('#bkPanel').is_visible())
+        else: check(tag+'after the check, backup goes ahead', 'Last backup: never' not in p3.inner_text('#storeNote'))
         if mode == 'db':
             ctx4 = b.new_context(viewport={'width':390,'height':844}); ctx4.add_init_script("window.__tillTest=1;window.__failShops=1;localStorage.setItem('__mockdb',JSON.stringify({shops:{'x':{name:'Sample Shop',kind:'points',key:'sample shop|points',status:'display',format:'CODE128'}}}));"); ctx4.add_init_script(MOCK)
             p4 = ctx4.new_page(); e4 = []; p4.on('pageerror', lambda e: e4.append(str(e)))
