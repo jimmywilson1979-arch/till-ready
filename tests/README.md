@@ -10,7 +10,14 @@
 - double tap logs one outcome; promotion covers one retailer and type only; "Change to Remind only" covers that retailer and type;
 - used vouchers with a saved picture appear in the clean-up list;
 - backup, then restore on a fresh "phone" (no duplicates on a second restore); last-backup date shown;
+- terms must be ticked on every voucher, even for an approved shop and type; a different barcode type gets a first till test; changing the shop, type, number or barcode type unticks the terms;
+- Sainsbury's can't be unlocked by a restored record; shop records that fail to load fall back to the built-in safe list;
+- restore rejects malformed vouchers and shop records, duplicates in the file and newer backup versions, and reports what it skipped;
+- the long-press picture is present after saving; "It didn't save" shows help and can still be confirmed; closing clears it; file names are tracked from the start; deleting a voucher asks for its picture to be deleted first; editing a voucher makes its picture stale and lists it for clean-up;
+- the one-time Downloads privacy check comes before any download; the backup date is only recorded after confirming the file saved;
 - open-elsewhere QR decodes to the app link; no page errors.
+
+Result on 24 Nov 2026: 296 passed, 0 failed, on three consecutive runs.
 
 Run: `python3 tests/test_till_ready.py "$PWD/index.html" /tmp/tr` (needs playwright with Chrome, opencv-python, zxing-cpp). Made-up data only.
 Not covered here: the real Claude-account storage and photo reading, Android downloads, Google Photos settings and calendar notifications. Those are checked on James's phone after release.
