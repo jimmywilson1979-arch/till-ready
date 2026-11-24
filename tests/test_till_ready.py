@@ -25,6 +25,7 @@ SEED = [
  V('ss', shop='Sample Shop', kind='moneyoff', mine=True, termsChecked=True, offer='£1 off', expires=d(12)),
  V('sp', shop='Sample Shop', kind='points', mine=True, termsChecked=True, offer='Sample points', expires=d(13)),
  V('nt', shop='Morrisons', kind='points', mine=True, offer='No terms ticked', expires=d(14)),
+ V('td', shop='Morrisons', kind='points', mine=True, termsChecked=True, offer='Ends today', expires=d(0)),
  V('fm', shop='Morrisons', kind='points', mine=True, termsChecked=True, format='EAN13', code='4006381333931', offer='Different barcode type', expires=d(15)),
 ]
 MOCK = r"""
@@ -63,6 +64,7 @@ def run(mode):
             else: pg.click('#tabLive')
             pg.locator('.slip', has_text=offer).first.click(); pg.wait_for_timeout(300)
         vis = lambda sel: pg.locator(sel).is_visible()
+        check(tag+'use-today alert shows', vis('#todayBan') and 'Ends today' in pg.inner_text('#todayText'), pg.inner_text('#todayText') if vis('#todayBan') else '')
         # --- eligibility matrix ---
         cases = [('1000 More Points', True, 'display', True), ('£2 off £20', False, 'remind', False), ('£3 off £30', True, 'first', True),
                  ("Someone else's", False, 'remind', False), ('£3 off a £20 shop', False, 'remind', False), ('No type yet', False, 'remind', False),
@@ -81,7 +83,7 @@ def run(mode):
         # wallet: no mini barcode for remind-only or old
         minis = pg.evaluate("[...document.querySelectorAll('#list .slip')].map(s=>[s.querySelector('.offer').textContent, !s.querySelector('.mini').hidden])")
         for o, shown in minis:
-            check(tag+f'wallet mini barcode for {o}', shown == (o in ('1000 More Points when you spend £30','£3 off £30','£1 off','Sample points','Different barcode type')), shown)
+            check(tag+f'wallet mini barcode for {o}', shown == (o in ('1000 More Points when you spend £30','£3 off £30','£1 off','Sample points','Different barcode type','Ends today')), shown)
         # expired: no barcode
         open_by('Expired one', old=True); check(tag+'expired hides barcode', not vis('#dTill')); check(tag+'expired hides outcome', not vis('#dOutcome')); pg.click('#dClose'); pg.click('#tabLive')
         # --- barcode on screen + saved picture, several formats incl. leading zeros ---
@@ -142,17 +144,26 @@ def run(mode):
         pg.fill('#fShop', 'Another Shop'); check(tag+'editor: unknown shop, no type -> remind only', g() == '-display -first *remind', g())
         pg.select_option('#fKind', 'moneyoff'); pg.check('#fMine'); check(tag+'editor: mine but terms unchecked -> remind', g() == '-display -first *remind', g())
         pg.check('#fTerms'); check(tag+'editor: terms checked -> first', g() == '-display *first remind', g())
-        pg.fill('#fShop', 'Morrisons'); pg.select_option('#fKind', 'points'); check(tag+'editor: Morrisons points -> display', g() == '*display first remind', g())
+        pg.fill('#fShop', 'Morrisons'); pg.select_option('#fKind', 'points'); check(tag+'editor: changing shop unticks terms and mine', not pg.is_checked('#fTerms') and not pg.is_checked('#fMine'))
+        pg.check('#fMine'); pg.check('#fTerms'); check(tag+'editor: Morrisons points -> display', g() == '*display first remind', g())
         check(tag+'editor: card suggested', pg.evaluate("[document.getElementById('fNeedsCard').checked,document.getElementById('fCardName').value]") == [True,'More Card'])
         pg.uncheck('#fMine'); check(tag+'editor: not mine -> remind', g() == '-display -first *remind', g())
         pg.fill('#fShop', "Sainsbury's"); pg.check('#fMine'); check(tag+"editor: Sainsbury's locked", g() == '-display -first *remind', g())
         pg.uncheck('#fTerms'); pg.fill('#fShop', 'Morrisons'); check(tag+'editor: Morrisons points without terms -> remind', g() == '-display -first *remind', g()); pg.check('#fTerms')
+        pg.fill('#fCode', '1234567890128'); check(tag+'new voucher: changing the number after ticking unticks terms', not pg.is_checked('#fTerms')); pg.check('#fTerms')
+        pg.fill('#fShop', 'Morrisons Daily'); check(tag+'new voucher: changing the shop unticks mine', not pg.is_checked('#fMine')); pg.fill('#fShop','Morrisons'); pg.check('#fMine'); pg.check('#fTerms')
         pg.fill('#fShop', 'Morrisons'); pg.select_option('#fKind', 'points'); pg.check('#fMine'); pg.fill('#fCode', '9780201379624'); pg.select_option('#fFormat','EAN13')
+        pg.check('#fTerms')
         pg.fill('#fExp', d(4)); pg.locator('#form button[type=submit]').last.click(); pg.wait_for_timeout(500)
         nv = pg.evaluate("__tr.vouchers.find(x=>x.code==='9780201379624')")
         check(tag+'new voucher saved with type/owner/status', nv and nv['kind']=='points' and nv['mine'] is True and nv['tillStatus']=='first', nv)
         check(tag+'new voucher: reminder prompt opens', vis('#dCalPanel')); pg.click('#dClose')
         # --- first test accepted: promotes that shop+type only; double tap -> one outcome ---
+        open_by('Sample points'); pg.click('#dAcc'); pg.wait_for_timeout(500)
+        pg.evaluate("(async()=>{const v=__tr.vouchers.find(x=>x.id==='sp');await __tr.persist(Object.assign({},v,{kind:'item',format:'EAN13',code:'9780201379624'}))})()"); pg.wait_for_timeout(500)
+        pg.click('#dPromoteYes'); pg.wait_for_timeout(500)
+        check(tag+'promotion approves what was accepted', pg.evaluate("__tr.tillStatus({shop:'Sample Shop',kind:'points',format:'CODE128',mine:true,termsChecked:true,expires:'2099-01-01'})") == 'display')
+        check(tag+'promotion ignores later edits', pg.evaluate("__tr.tillStatus({shop:'Sample Shop',kind:'item',format:'EAN13',mine:true,termsChecked:true,expires:'2099-01-01'})") == 'first')
         open_by('£1 off'); pg.evaluate("document.getElementById('dAcc').click();document.getElementById('dAcc').click()"); pg.wait_for_timeout(500)
         check(tag+'double tap logs one outcome', pg.evaluate("(__tr.vouchers.find(x=>x.id==='ss').outcomes||[]).length") == 1)
         check(tag+'promotion offered', vis('#dPromote'))
@@ -160,10 +171,11 @@ def run(mode):
         check(tag+'Sample Shop money off now display', pg.evaluate("__tr.tillStatus({shop:'Sample Shop',kind:'moneyoff',format:'CODE128',mine:true,termsChecked:true,expires:'2099-01-01'})") == 'display')
         check(tag+'promotion covers its barcode type only', pg.evaluate("__tr.tillStatus({shop:'Sample Shop',kind:'moneyoff',format:'EAN13',mine:true,termsChecked:true,expires:'2099-01-01'})") == 'first')
         check(tag+'promoted class still needs terms per voucher', pg.evaluate("__tr.tillStatus({shop:'Sample Shop',kind:'moneyoff',format:'CODE128',mine:true,expires:'2099-01-01'})") == 'remind')
-        check(tag+'Sample Shop points unchanged', pg.evaluate("__tr.tillStatus(__tr.vouchers.find(x=>x.id==='sp'))") == 'first')
+        check(tag+'Sample Shop money off promotion separate from points', pg.evaluate("__tr.shopRec('Sample Shop','points').format") == 'CODE128')
         # --- refused keeps voucher; change to remind applies to shop+type ---
         open_by('£3 off £30'); pg.click('#dRef'); pg.wait_for_timeout(400)
         check(tag+'refused panel', vis('#dRefPanel'))
+        pg.wait_for_timeout(500); check(tag+'outcome buttons stay hidden after refusal syncs', not vis('#dOutcome'))
         mt = pg.evaluate("__tr.vouchers.find(x=>x.id==='mt')"); check(tag+'refused not used', mt['used'] is False and mt['outcomes'][-1]['result']=='refused', mt)
         pg.click('#dToRemind'); pg.wait_for_timeout(500)
         check(tag+'Morrisons money off now remind only', pg.evaluate("__tr.tillStatus({shop:'Morrisons',kind:'moneyoff',mine:true,termsChecked:true,expires:'2099-01-01'})") == 'remind')
@@ -178,9 +190,24 @@ def run(mode):
         pg.click('#dImgYes'); pg.wait_for_timeout(300); pg.click('#dEdit'); pg.wait_for_timeout(200)
         pg.fill('#fOffer', 'Different barcode type (edited)'); pg.locator('#form button[type=submit]').last.click(); pg.wait_for_timeout(600)
         if vis('#detail'): pg.click('#dClose')
-        check(tag+'edited voucher picture listed for clean-up', pg.evaluate("__tr.vouchers.find(x=>x.id==='fm').imageStale===true") and 'Morrisons' in pg.inner_text('#cleanList'))
-        pg.locator('#cleanList [data-clean]').first.click(); pg.wait_for_timeout(400)
+        check(tag+'edited voucher picture listed for clean-up', pg.evaluate("(__tr.vouchers.find(x=>x.id==='fm').staleFiles||[]).length===1") and 'Morrisons' in pg.inner_text('#cleanList'))
+        old_name = pg.evaluate("__tr.vouchers.find(x=>x.id==='fm').staleFiles[0]")
+        open_by('Different barcode type (edited)')
+        with pg.expect_download(): pg.click('#dSaveImg')
+        pg.click('#dImgYes'); pg.wait_for_timeout(300); pg.click('#dClose')
+        check(tag+'re-saving keeps the old picture in clean-up', old_name in pg.inner_text('#cleanList'), pg.inner_text('#cleanList'))
+        # pending picture after the voucher changes elsewhere
+        open_by('Different barcode type (edited)')
+        with pg.expect_download(): pg.click('#dSaveImg')
+        pg.evaluate("(async()=>{const v=__tr.vouchers.find(x=>x.id==='fm');await __tr.persist(Object.assign({},v,{offer:'Changed on another device'}))})()"); pg.wait_for_timeout(700)
+        check(tag+'changed voucher hides the pending picture', not vis('#dImgPanel'))
+        check(tag+'its file goes to clean-up', pg.evaluate("(__tr.vouchers.find(x=>x.id==='fm').staleFiles||[]).length") >= 2)
+        pg.click('#dClose')
+        pg.evaluate("document.querySelectorAll('#cleanList [data-clean]').forEach(b=>b.click())"); pg.wait_for_timeout(600)
         # --- cleanup list after use ---
+        open_by('1000 More Points')
+        with pg.expect_download(): pg.click('#dSaveImg')
+        pg.click('#dImgYes'); pg.wait_for_timeout(300); pg.click('#dClose')
         pg.evaluate("(async()=>{const v=__tr.vouchers.find(x=>x.id==='mp');await __tr.persist(Object.assign({},v,{used:true,usedAt:__tr.todayISO()}))})()"); pg.wait_for_timeout(500)
         check(tag+'cleanup panel lists used voucher picture', vis('#cleanPanel') and 'Morrisons' in pg.inner_text('#cleanList'))
         pg.locator('#cleanList [data-clean]').first.click(); pg.wait_for_timeout(400)
@@ -205,13 +232,16 @@ def run(mode):
         check(tag+'second restore adds nothing', p2.evaluate("__tr.vouchers.length") == len(SEED)+1)
         bad = {'app':'Till Ready','version':1,'vouchers':[{'id':'z1','code':'','format':'CODE128'},{'id':'z2','code':'12','format':'EAN13'},{'id':'z3','code':'1234567890128','format':'NOPE'},
                {'id':'z4','code':'1234567890128','format':'CODE128','mine':'yes'},{'id':'z5','code':'1234567890128','format':'CODE128','expires':'31/12/26'},
-               {'id':'z6','code':'1234567890128','format':'CODE128','shop':'Test','kind':'points'},{'id':'z6','code':'1234567890128','format':'CODE128'},{'id':'bad id!','code':'1','format':'CODE128'}],
-               'shops':{"sainsbury's|moneyoff":{'name':"Sainsbury's",'kind':'moneyoff','status':'display'},'x|points':{'name':'Y','kind':'points','status':'display'},'ok shop|points':{'name':'OK Shop','kind':'points','status':'superstar'}}}
+               {'id':'z6','code':'1234567890128','format':'CODE128','shop':'Test','kind':'points'},{'id':'z6','code':'1234567890128','format':'CODE128'},{'id':'bad id!','code':'1','format':'CODE128'},
+               {'id':'z7','code':'1234567890128','format':'CODE128','expires':'2026-02-30'},{'id':'z8','code':'1234567890128','format':'CODE128','outcomes':[{'result':'maybe','at':'x'}]}],
+               'shops':{"sainsbury's|moneyoff":{'name':"Sainsbury's",'kind':'moneyoff','status':'display'},'x|points':{'name':'Y','kind':'points','status':'display'},'ok shop|points':{'name':'OK Shop','kind':'points','status':'superstar'},'nf shop|points':{'name':'NF Shop','kind':'points','status':'display','basis':'x'}}}
         json.dump(bad, open(f'{OUT}/{mode}_bad.json','w')); n0 = p2.evaluate("__tr.vouchers.length")
         p2.set_input_files('#rsFile', f'{OUT}/{mode}_bad.json'); p2.wait_for_timeout(1500)
         msg = p2.inner_text('#rsMsg')
         check(tag+'malformed restore: only the valid voucher added', p2.evaluate("__tr.vouchers.length") == n0+1, (n0, p2.evaluate("__tr.vouchers.length"), msg))
         check(tag+'malformed restore reports skips', 'skipped' in msg and 'duplicate in file' in msg and 'shop only accepts originals' in msg, msg)
+        check(tag+'restore rejects approval without barcode type', 'approval without barcode type' in msg and p2.evaluate("__tr.tillStatus({shop:'NF Shop',kind:'points',format:'CODE128',mine:true,termsChecked:true,expires:'2099-01-01'})") == 'first', msg)
+        check(tag+'restore rejects impossible dates and bad outcomes', 'bad date' in msg and 'bad outcomes' in msg, msg)
         check(tag+"restore can't unlock Sainsbury's", p2.evaluate("__tr.tillStatus({shop:\"Sainsbury's\",kind:'moneyoff',format:'CODE128',mine:true,termsChecked:true,expires:'2099-01-01'})") == 'remind')
         json.dump({'app':'Till Ready','version':2,'vouchers':[]}, open(f'{OUT}/{mode}_v2.json','w'))
         p2.set_input_files('#rsFile', f'{OUT}/{mode}_v2.json'); p2.wait_for_timeout(600)
