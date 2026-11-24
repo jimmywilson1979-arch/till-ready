@@ -267,10 +267,10 @@ a.link{color:var(--accent);font-weight:700;overflow-wrap:anywhere}
     </div>
     <div class="panel" id="dImgPanel" hidden>
       <h3>Barcode picture for no-signal use</h3>
-      <p>It should now be in your Downloads. If it didn't download, press and hold the picture and choose Download image.</p>
+      <p>Confirm the save when your phone asks. If it doesn't save, press and hold the picture and choose Download image.</p>
       <img class="saveimg" id="dImg" alt="Barcode picture to save">
       <p class="hint">Before relying on it: in Google Photos, check Backup → Back up device folders, and make sure Download is switched off, so the picture stays on your phone. Test it once in airplane mode.</p>
-      <div class="row-btns"><button class="btn primary" id="dImgYes" type="button">It's saved</button><button class="btn" id="dImgNo" type="button">It didn't save</button></div>
+      <div class="row-btns" id="dImgAsk"><button class="btn primary" id="dImgYes" type="button">It's saved</button><button class="btn" id="dImgNo" type="button">It didn't save</button></div>
       <p class="hint" id="dImgHelp" hidden>Press and hold the picture above and choose Download image. Then tap It's saved. A picture saved this way may get a different name: delete it by hand once the voucher is used.</p>
     </div>
     <div class="panel" id="dCalPanel" hidden>
@@ -696,18 +696,36 @@ function barcodeCanvas(v){
   return c;
 }
 let pendingImg=null;
-$('dSaveImg').onclick=()=>withDlCheck(async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;if(!canShowBarcode(v)){toast('This voucher can’t be shown at the till.');return}
-  try{const url=barcodeCanvas(v).toDataURL('image/png');hidePanels();$('dImg').src=url;$('dImgPanel').hidden=false;$('dImgHelp').hidden=true;
+let saving=false;
+$('dSaveImg').onclick=()=>withDlCheck(async()=>{if(saving){toast('A save is already waiting for you to confirm');return}const v=vouchers.find(x=>x.id===openId);if(!v)return;if(!canShowBarcode(v)){toast('This voucher can’t be shown at the till.');return}
+  try{const cv=barcodeCanvas(v),url=cv.toDataURL('image/png');hidePanels();$('dImg').src=url;$('dImgPanel').hidden=false;$('dImgHelp').hidden=true;$('dImgAsk').hidden=false;
     const name=`till-ready-${(v.shop||'voucher').replace(/[^A-Za-z0-9]+/g,'-').toLowerCase()}-${v.expires||'no-date'}-${Math.random().toString(36).slice(2,6)}.png`;
-    pendingImg={id:v.id,name,sig:sig(v)};
+    const req={id:v.id,name,sig:sig(v)};pendingImg=req;
     /* The file name is tracked before the download starts, so a picture is never left untracked. */
     await persist(Object.assign({},v,{imageFiles:(v.imageFiles||[]).concat([name])}));
-    const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
-    $('dImgPanel').scrollIntoView({block:'center'})}catch(e){toast('Couldn’t make the picture. '+errText(e))}});
+    $('dImgPanel').scrollIntoView({block:'center'});
+    saving=true;$('dSaveImg').disabled=true;
+    let res;try{res=await offerFile(name,await canvasBlob(cv))}finally{saving=false;$('dSaveImg').disabled=false}
+    await settleSave(req,res);
+  }catch(e){toast('Couldn’t make the picture. '+errText(e))}});
+/* The answer to a save applies only to the exact request it was for (same voucher, same details,
+   still allowed at the till). Anything else sends the file to clean-up. Shared with "It's saved". */
+async function settleSave(req,res){
+  const cur=vouchers.find(x=>x.id===req.id), here=openId===req.id&&pendingImg===req;
+  if(res==='saved'){
+    if(cur&&sig(cur)===req.sig&&canShowBarcode(cur)){await persist(Object.assign({},cur,{imageSaved:true}));
+      if(here){$('dImgAsk').hidden=true;$('dImgHelp').hidden=true}toast('Saved. You’ll be reminded to delete it once used')}
+    else{if(cur)await persist(Object.assign({},cur,{staleFiles:(cur.staleFiles||[]).concat([req.name]),imageFiles:(cur.imageFiles||[]).filter(x=>x!==req.name)}));
+      if(here)hidePanels();toast('That voucher changed while saving, so the picture is out of date. Delete it from Downloads.')}
+    return}
+  if(!here)return;
+  if(res==='declined'){toast('Not saved. You can press and hold the picture instead');$('dImgHelp').hidden=false}
+  else if(res==='busy'){toast('Another save is waiting. Try again in a moment')}
+  else if(res==='unavailable'||res==='other'){$('dImgHelp').hidden=false;toast('Saving isn’t available here. Press and hold the picture instead')}
+}
 $('dImgYes').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v||!pendingImg||pendingImg.id!==v.id)return;
-  if(!canShowBarcode(v)){toast('This voucher can’t be shown at the till any more.');hidePanels();return}
-  if(sig(v)!==pendingImg.sig){const name=pendingImg.name;hidePanels();try{await persist(Object.assign({},v,{staleFiles:(v.staleFiles||[]).concat([name]),imageFiles:(v.imageFiles||[]).filter(x=>x!==name)}))}catch(e){}toast('This voucher changed, so that picture is out of date. Delete it and save a new one.');return}
-  try{await persist(Object.assign({},v,{imageSaved:true}));toast('Noted. You’ll be reminded to delete it once used');hidePanels()}catch(e){toast(errText(e))}};
+  const req=pendingImg;
+  try{await settleSave(req,'saved');if(pendingImg===req)hidePanels()}catch(e){toast(errText(e))}};
 $('dImgNo').onclick=()=>{$('dImgHelp').hidden=false;toast('Press and hold the picture above, choose Download image, then tap It’s saved')};
 /* Clean-up covers every file name ever started, whether or not the save was confirmed. */
 function allPics(v){return (v.staleFiles||[]).concat(v.imageFiles||[])}
@@ -737,12 +755,14 @@ $('dRemindBtn').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(!v)retur
   const slots=reminderSlots(v),L=$('dCalLinks');L.innerHTML='';
   if(!v.expires){$('dCalText').textContent='Add the "Valid until" date first (Edit details), then add reminders.';$('dIcs').hidden=true;$('dCalDone').hidden=true}
   else if(!slots.length){$('dCalText').textContent=daysLeft(v.expires)<0?'This voucher has run out, so there is nothing to remind you about.':'This voucher ends tonight and there isn\'t time for a calendar reminder. Use it today.';$('dIcs').hidden=true;$('dCalDone').hidden=true}
-  else{$('dCalText').textContent='Tap each one to add it in Google Calendar and save it there. Check the event has a notification. The reminders hold no voucher numbers.';$('dIcs').hidden=false;$('dCalDone').hidden=false;
+  else{$('dCalText').textContent='Tap each one to add it in Google Calendar and save it there. Check the event has a notification. The reminders hold no voucher numbers.';$('dIcs').hidden=$('dIcs').dataset.off==='1';$('dCalDone').hidden=false;
     for(const s of slots){const a=document.createElement('a');a.className='btn';a.target='_blank';a.rel='noopener';
       const e=new Date(s.when.getTime()+15*60e3);
       a.href='https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(calTitle(v))+'&dates='+icsTime(s.when)+'/'+icsTime(e)+'&ctz=Europe/London&details='+encodeURIComponent('Open Till Ready: '+APP_URL);
       a.textContent='＋ '+s.label;L.appendChild(a)}}
   $('dCalPanel').scrollIntoView({block:'center'})};
+if(window.claude)$('dIcs').dataset.off='1';
+getDl().then(dl=>{if(dl||window.claude){$('dIcs').dataset.off='1';$('dIcs').hidden=true}});
 $('dIcs').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;const stamp=new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
   const ev=reminderSlots(v).map((s,i)=>['BEGIN:VEVENT','UID:'+uid()+'@tillready','DTSTAMP:'+stamp,'DTSTART;TZID=Europe/London:'+icsTime(s.when),'DTEND;TZID=Europe/London:'+icsTime(new Date(s.when.getTime()+15*60e3)),'SUMMARY:'+calTitle(v).replace(/[,;]/g,' '),'DESCRIPTION:Open Till Ready: '+APP_URL,'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+calTitle(v).replace(/[,;]/g,' '),'TRIGGER:PT0M','END:VALARM','END:VEVENT'].join('\r\n'));
   const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Till Ready//EN',...ev,'END:VCALENDAR'].join('\r\n');
@@ -932,6 +952,29 @@ $('form').addEventListener('submit',async ev=>{
   finally{btns.forEach(b=>b.disabled=false)}
 });
 
+/* ---------- giving James a file ----------
+   Inside the Claude app the page may not download directly: files go through the
+   platform's "downloads" capability, which asks James to confirm. In a plain browser
+   (outside Claude) a normal download link is used. */
+var dlNs=null; // var: getDl() is also called earlier in the script
+function getDl(){
+  if(!dlNs){let p;try{p=(window.claude&&typeof window.claude.use==='function')?Promise.resolve(window.claude.use('downloads')).catch(()=>null):Promise.resolve(null)}catch(e){p=Promise.resolve(null)}
+    /* Don't remember a failure: the next save tries again. */
+    dlNs=p.then(ns=>{if(!ns)dlNs=null;return ns})}
+  return dlNs}
+async function offerFile(filename,data){
+  const dl=await getDl();
+  if(dl){try{const r=await dl.save({filename,data});return r&&r.status==='saved'?'saved':'other'}
+    catch(e){const c=e&&e.code;return c==='declined'?'declined':c==='rate_limited'?'busy':'unavailable'}}
+  /* Inside Claude without the downloads feature there is no other way to save a file. */
+  if(window.claude)return 'unavailable';
+  const url=typeof data==='string'?'data:application/json;charset=utf-8,'+encodeURIComponent(data):URL.createObjectURL(data);
+  const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+  if(typeof data!=='string')setTimeout(()=>URL.revokeObjectURL(url),60000);
+  return 'started';
+}
+function canvasBlob(c){return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('no picture')),'image/png'))}
+
 /* ---------- one-time check that Downloads isn't backed up elsewhere (per phone) ---------- */
 let dlNext=null;
 function withDlCheck(fn){let ok=false;try{ok=localStorage.getItem('tillready.dlcheck')==='1'}catch(e){}if(ok){fn();return}dlNext=fn;$('dlOv').hidden=false}
@@ -939,12 +982,16 @@ $('dlOk').onclick=()=>{try{localStorage.setItem('tillready.dlcheck','1')}catch(e
 $('dlNo').onclick=()=>{$('dlOv').hidden=true;dlNext=null;toast('Nothing saved')};
 
 /* ---------- backup and restore (joint plan: one tap, James's choice) ---------- */
-$('bkBtn').onclick=()=>withDlCheck(()=>{const at=new Date().toISOString();
+$('bkBtn').onclick=()=>withDlCheck(async()=>{const at=new Date().toISOString();
   const data={app:'Till Ready',version:1,exportedAt:at,vouchers,shops:shopRecs};
-  const a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(data));a.download='till-ready-backup-'+todayISO()+'.json';document.body.appendChild(a);a.click();a.remove();
-  $('bkPanel').hidden=false;$('bkPanel').dataset.at=at});
-$('bkYes').onclick=async()=>{const at=$('bkPanel').dataset.at;$('bkPanel').hidden=true;
-  try{if(mode==='db'&&metaCol)await metaCol.doc('backup').set({at});else localStorage.setItem('tillready.lastBackup',at);lastBackup=at;footNote();toast('Backup date recorded')}catch(e){toast('Couldn’t record the backup date. '+errText(e))}};
+  const res=await offerFile('till-ready-backup-'+todayISO()+'.json',JSON.stringify(data));
+  if(res==='saved'){await recordBackup(at)}
+  else if(res==='started'){$('bkPanel').hidden=false;$('bkPanel').dataset.at=at}
+  else if(res==='declined')toast('Backup not saved');
+  else if(res==='busy')toast('Another save is waiting. Try again in a moment');
+  else toast('Backups can’t be saved here (unavailable or not confirmed). Nothing was recorded')});
+async function recordBackup(at){try{if(mode==='db'&&metaCol)await metaCol.doc('backup').set({at});else localStorage.setItem('tillready.lastBackup',at);lastBackup=at;footNote();toast('Backup saved. Keep it private')}catch(e){toast('Backup saved, but its date wasn’t recorded. '+errText(e))}}
+$('bkYes').onclick=async()=>{const at=$('bkPanel').dataset.at;$('bkPanel').hidden=true;await recordBackup(at)};
 $('bkNo').onclick=()=>{$('bkPanel').hidden=true;toast('Try Back up now again')};
 /* Restore: strict checks; never overwrites what's here; can't loosen a restriction. */
 const VFIELDS=['id','code','format','shop','kind','offer','expires','card','notes','mine','termsChecked','tillStatus','needsCard','cardName','used','usedAt','createdAt','updatedAt','outcomes','reminder','imageSaved','imageFiles','staleFiles','photo'];
