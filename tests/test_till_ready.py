@@ -36,6 +36,10 @@ const db={collection:c=>({doc:id=>({set:async x=>{const o=load();o[c]=o[c]||{};o
   onSnapshot:(cb,err)=>{if(c==='shops'&&window.__failShops){setTimeout(()=>err({code:'unavailable'}),0);return ()=>{}}(L[c]=L[c]||[]).push(cb);setTimeout(()=>emit(c),0);return ()=>{}}})};
 const downloads={save:async({filename,data})=>{window.__saves=(window.__saves||[]).concat([filename]);
   if(window.__declineSaves)throw {code:'declined'};
+  if(window.__saveMode==='busy')throw {code:'rate_limited'};
+  if(window.__saveMode==='unavailable')throw {code:'unavailable'};
+  if(window.__saveMode==='delivered')return {status:'delivered'};
+  if(window.__saveMode==='wait'){await new Promise(r=>{window.__releaseSave=r})}
   const url=typeof data==='string'?'data:application/json;charset=utf-8,'+encodeURIComponent(data):URL.createObjectURL(data);
   const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();return {status:'saved'}}};
 window.claude={use:async n=>{if(n==='db')return db;if(n==='downloads')return downloads;throw {code:'not_granted'}}};})();
@@ -125,6 +129,30 @@ def run(mode):
             check(tag+'declined save shows the long-press help', vis('#dImgHelp'))
             check(tag+'declined save used the platform', any(x.endswith('.png') for x in pg.evaluate("window.__saves||[]")))
             pg.evaluate("window.__declineSaves=0"); pg.click('#dClose')
+            def try_mode(m):
+                pg.evaluate(f"window.__saveMode='{m}'"); open_by('1000 More Points'); before = pg.evaluate("(__tr.vouchers.find(x=>x.id==='mp').imageFiles||[]).length")
+                pg.click('#dSaveImg'); pg.wait_for_timeout(500)
+                r = (pg.evaluate("__tr.vouchers.find(x=>x.id==='mp').imageSaved===true"), vis('#dImgHelp'))
+                pg.evaluate("window.__saveMode=''"); pg.click('#dClose'); return r
+            pg.evaluate("(async()=>{const v=__tr.vouchers.find(x=>x.id==='mp');await __tr.persist(Object.assign({},v,{imageSaved:false}))})()"); pg.wait_for_timeout(300)
+            saved, helpv = try_mode('busy'); check(tag+'busy save: nothing recorded, no help', not saved and not helpv)
+            saved, helpv = try_mode('unavailable'); check(tag+'unavailable save: nothing recorded, long-press help', not saved and helpv)
+            saved, helpv = try_mode('delivered'); check(tag+'unexpected save result: not recorded, long-press help', not saved and helpv)
+            # voucher changes while the save prompt is open: the late "saved" goes to clean-up
+            pg.evaluate("window.__saveMode='wait'"); open_by('1000 More Points'); pg.click('#dSaveImg'); pg.wait_for_timeout(400)
+            n0 = pg.evaluate("__tr.vouchers.find(x=>x.id==='mp').__saves") ; calls0 = len(pg.evaluate("window.__saves||[]"))
+            check(tag+'save button disabled while waiting', pg.is_disabled('#dSaveImg'))
+            pg.evaluate("document.getElementById('dSaveImg').disabled=false;document.getElementById('dSaveImg').click()"); pg.wait_for_timeout(300)
+            check(tag+'second tap while waiting: no second save', len(pg.evaluate("window.__saves||[]")) == calls0)
+            pg.evaluate("(async()=>{const v=__tr.vouchers.find(x=>x.id==='mp');await __tr.persist(Object.assign({},v,{offer:v.offer+' (changed)'}))})()"); pg.wait_for_timeout(500)
+            pg.evaluate("window.__saveMode='';window.__releaseSave&&window.__releaseSave()"); pg.wait_for_timeout(700)
+            mpv = pg.evaluate("__tr.vouchers.find(x=>x.id==='mp')")
+            check(tag+'late save for a changed voucher goes to clean-up', mpv.get('imageSaved') is not True and len(mpv.get('staleFiles') or []) >= 1, mpv.get('staleFiles'))
+            if vis('#detail'): pg.click('#dClose')
+            pg.evaluate("(async()=>{const v=__tr.vouchers.find(x=>x.id==='mp');await __tr.persist(Object.assign({},v,{offer:'1000 More Points when you spend £30',staleFiles:[]}))})()"); pg.wait_for_timeout(400)
+            # backup declined: no date
+            pg.evaluate("window.__declineSaves=1"); pg.click('#bkBtn'); pg.wait_for_timeout(400); pg.evaluate("window.__declineSaves=0")
+            check(tag+'declined backup records no date', 'Last backup: never' in pg.inner_text('#storeNote'))
         # --- reminders: boundaries ---
         def slots(exp, now):
             return pg.evaluate(f"(()=>{{window.__tillNow='{now}';return __tr.reminderSlots({{expires:'{exp}'}}).map(s=>s.label.split(' · ')[0]+'@'+s.when.toISOString())}})()")

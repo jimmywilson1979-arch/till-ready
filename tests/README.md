@@ -19,7 +19,7 @@
 - restore rejects impossible dates and malformed outcomes; re-saving a picture keeps older pictures in clean-up; a picture pending confirmation is dropped to clean-up if the voucher changes; outcome buttons stay hidden after a refusal syncs; use-today alert in the wallet;
 - open-elsewhere QR decodes to the app link; no page errors.
 
-Result on 24 Nov 2026 (PR #2): 322 passed, 0 failed, on three consecutive runs. In database mode the test also stands in for the platform's downloads feature (save accepted or declined).
+Result on 24 Nov 2026 (PR #2): 329 passed, 0 failed, on three consecutive runs. In database mode the test also stands in for the platform's downloads feature (saved, declined, busy, unavailable, unexpected result, and a voucher changing while the save prompt is open).
 
 Run: `python3 tests/test_till_ready.py "$PWD/index.html" /tmp/tr` (needs playwright with Chrome, opencv-python, zxing-cpp). Made-up data only.
 Not covered here: the real Claude-account storage and photo reading, Android downloads, Google Photos settings and calendar notifications. Those are checked on James's phone after release.
