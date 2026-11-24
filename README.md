@@ -2,7 +2,7 @@
 
 A simple phone app (Android, Chrome) to keep track of genuine supermarket money-off vouchers and their expiry dates.
 
-Status: pilot project. No app code yet; it arrives only as pull requests once the design is approved.
+Status: pilot project. `index.html` is the app (it runs as James's private Claude artifact). Changes arrive as pull requests; after James merges, Claude republishes the artifact from the exact merged file and checks it byte for byte.
 
 ## Rules for this repository
 

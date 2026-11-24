@@ -3,7 +3,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&family=Barlow:wght@400;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap">
 <style>
 /* Layout: one phone column; each voucher is a torn till-receipt slip on a cool counter-top grey, opening to a white "show at till" panel */
 :root{
@@ -26,6 +26,14 @@
   --warn:#f2b95c; --warn-bg:#3a2a0f; --bad:#f28c80; --bad-bg:#3f1d19;
   --till-bg:#ffffff; --till-ink:#000000; --shade:rgba(0,0,0,.6); --shadow:rgba(0,0,0,.5); color-scheme:dark}
 
+/* v1: dark-and-gold house style (approved mockup, 24 Nov 2026). The till panel stays white for scanning. */
+:root:root:root{
+  --bg:#0a0c10; --slip:#111318; --ink:#f3f1ea; --muted:#a3a7ae; --line:#2a2d35;
+  --accent:#e8b53a; --accent-ink:#14110a; --accent-soft:#3a2f12;
+  --warn:#f2b95c; --warn-bg:#3a2a0f; --bad:#f28c80; --bad-bg:#3f1d19; --info:#9cc3f5; --info-bg:#182a40;
+  --till-bg:#ffffff; --till-ink:#000000; --shade:rgba(0,0,0,.6); --shadow:rgba(0,0,0,.5); color-scheme:dark;
+  --f-display:'Barlow Condensed','Arial Narrow',Arial,sans-serif; --f-body:'Barlow',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.45}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -130,13 +138,54 @@ details img{display:block;width:100%;border-radius:0 0 10px 10px}
 
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:99px;font-weight:700;z-index:40;max-width:calc(100% - 32px)}
 @media (max-width:360px){.two{grid-template-columns:1fr}}
+/* ---- v1 additions ---- */
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.openqr{flex:none;border:1px solid var(--line);background:var(--slip);border-radius:10px;padding:6px 8px;font-size:12px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:var(--ink)}
+.openqr svg{width:30px;height:30px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:.78rem;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid transparent;white-space:nowrap}
+.chip.display{background:var(--accent-soft);color:var(--accent)}
+.chip.first{background:var(--info-bg);color:var(--info)}
+.chip.remind{background:var(--warn-bg);color:var(--warn)}
+.chip.plain{border-color:var(--line);color:var(--muted)}
+.cardban{background:var(--accent);color:var(--accent-ink);border-radius:12px;padding:14px;display:flex;gap:12px;align-items:flex-start;font-weight:700;font-size:1.15rem;line-height:1.2}
+.cardban svg{width:30px;height:30px;flex:none}
+.cardban small{display:block;font-weight:600;font-size:.88rem;margin-top:4px}
+.banner.first{background:var(--info-bg);color:var(--info)}
+.banner.remind{background:var(--warn-bg);color:var(--warn)}
+.banner small{display:block;font-weight:400;margin-top:2px}
+.how{font-size:.85rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:0}
+.btn.big{min-height:64px;font-size:1.2rem}
+.btn.good{background:#1f7a3b;border-color:#1f7a3b;color:#fff}
+.btn.badb{background:#a8392e;border-color:#a8392e;color:#fff}
+.btn.outline{border-color:var(--accent)}
+.panel{background:var(--slip);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.panel h3{margin:0;font-family:var(--f-display);font-size:1.25rem}
+.panel p{margin:0}
+.panel .btn{width:100%}
+.reasons{display:flex;flex-wrap:wrap;gap:6px}
+.reasons button{border:1px solid var(--line);background:transparent;border-radius:99px;padding:6px 12px;font-weight:700;cursor:pointer;color:var(--ink)}
+.reasons button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.saveimg{width:100%;border-radius:8px;background:#fff}
+.radios{display:flex;flex-direction:column;gap:8px}
+.radios label{display:flex;gap:10px;align-items:flex-start;background:var(--slip);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-weight:700;cursor:pointer}
+.radios input{margin-top:4px;accent-color:var(--accent)}
+.radios small{display:block;color:var(--muted);font-weight:400}
+.check{display:flex;gap:10px;align-items:center;font-weight:700}
+.check input{width:22px;height:22px;accent-color:var(--accent)}
+.qrbig{background:#fff;border-radius:12px;padding:14px;width:min(80vw,320px);margin:0 auto}
+.qrbig svg{display:block;width:100%;height:auto}
+a.link{color:var(--accent);font-weight:700;overflow-wrap:anywhere}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 </style>
 
 <div class="app">
   <header class="top">
-    <h1>Till <span>Ready</span></h1>
-    <p>Snap your money-off vouchers when you get them. Show the barcode at the checkout.</p>
+    <div>
+      <h1>Till <span>Ready</span></h1>
+      <p>Snap your money-off vouchers when you get them. Show the barcode at the checkout.</p>
+    </div>
+    <button class="openqr" id="openQr" type="button" aria-label="Open Till Ready on another device"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM14 20h2M20 14v2"/></svg>Open elsewhere</button>
   </header>
 
   <section class="actions" aria-label="Add a voucher">
@@ -170,7 +219,10 @@ details img{display:block;width:100%;border-radius:0 0 10px 10px}
       <span style="width:62px"></span>
     </div>
     <div class="banner" id="dWarn" hidden></div>
-    <div class="till">
+    <div class="cardban" id="dCard" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg><span id="dCardText"></span></div>
+    <div class="banner first" id="dFirst" hidden>First till test at this shop<small>Have the paper voucher in your hand. If the till won't take the phone, hand over the paper.</small></div>
+    <div class="banner remind" id="dRemind" hidden>Bring the paper voucher<small id="dRemindWhy"></small></div>
+    <div class="till" id="dTill">
       <div class="till-code" id="dCode"></div>
       <div class="digits" id="dDigits"></div>
       <div class="fmt" id="dFmt"></div>
@@ -178,8 +230,46 @@ details img{display:block;width:100%;border-radius:0 0 10px 10px}
     <p class="hint">Turn your screen brightness up and hold the phone flat, about a hand's width from the scanner.</p>
     <h2 class="d-offer" id="dOffer"></h2>
     <dl class="facts" id="dFacts"></dl>
+    <div id="dOutcome">
+      <p class="how">How did it go?</p>
+      <div class="row-btns" style="margin-top:8px">
+        <button class="btn good big" id="dAcc" type="button">✓ Accepted</button>
+        <button class="btn badb big" id="dRef" type="button">✗ Refused</button>
+      </div>
+    </div>
+    <div class="panel" id="dRefPanel" hidden>
+      <h3>Logged as refused</h3>
+      <p>The voucher is still in your wallet. It hasn't been marked as used.</p>
+      <p class="how">Why? (optional)</p>
+      <div class="reasons" id="dReasons"><button type="button" data-r="wanted paper">Staff wanted the paper</button><button type="button" data-r="didn't scan">Didn't scan</button><button type="button" data-r="card not scanned">Card not scanned</button><button type="button" data-r="other">Other</button></div>
+      <button class="btn" id="dToRemind" type="button">Change to Remind only</button>
+      <button class="btn primary" id="dRefDone" type="button">Keep it and use the paper</button>
+    </div>
+    <div class="panel" id="dPromote" hidden>
+      <h3>Accepted: marked as used</h3>
+      <p id="dPromoteText"></p>
+      <button class="btn primary" id="dPromoteYes" type="button">Yes, Display at till from now on</button>
+      <button class="btn" id="dPromoteNo" type="button">Not yet</button>
+    </div>
+    <div class="row-btns" id="dTools">
+      <button class="btn outline" id="dSaveImg" type="button">⤓ Save barcode to phone</button>
+      <button class="btn outline" id="dRemindBtn" type="button">📅 Add reminder</button>
+    </div>
+    <div class="panel" id="dImgPanel" hidden>
+      <h3>Barcode saved for no-signal use</h3>
+      <p>It should be in your Downloads. If it didn't download, press and hold the picture below and choose Download image.</p>
+      <img class="saveimg" id="dImg" alt="Barcode picture to save">
+      <p class="hint">Keep it in Downloads (not the camera folder) so it isn't backed up to Google Photos. Delete it once the voucher is used.</p>
+    </div>
+    <div class="panel" id="dCalPanel" hidden>
+      <h3>Add reminders</h3>
+      <p id="dCalText"></p>
+      <div id="dCalLinks" style="display:flex;flex-direction:column;gap:8px"></div>
+      <button class="btn" id="dIcs" type="button">Download calendar file (.ics)</button>
+      <button class="btn primary" id="dCalDone" type="button">I've saved them in my calendar</button>
+    </div>
     <div class="row-btns">
-      <button class="btn primary" id="dUsed" type="button">Mark as used</button>
+      <button class="btn" id="dUsed" type="button">Mark as used</button>
       <button class="btn" id="dEdit" type="button">Edit details</button>
       <button class="btn" id="dCopy" type="button">Copy number</button>
     </div>
@@ -252,6 +342,15 @@ details img{display:block;width:100%;border-radius:0 0 10px 10px}
       <input id="fOffer" autocomplete="off" placeholder="e.g. £5 off when you spend £40">
     </div>
     <div class="field">
+      <span style="font-weight:700;font-size:.92rem">At the till</span>
+      <div class="radios" id="fStatus">
+        <label><input type="radio" name="tst" value="display"><span>Display at till<small id="sDisplay">This shop has accepted this kind of voucher from the phone before.</small></span></label>
+        <label><input type="radio" name="tst" value="first"><span>First till test<small>Not tried at this shop yet. Take the paper too.</small></span></label>
+        <label><input type="radio" name="tst" value="remind"><span>Remind only<small>The shop wants the original, or it isn't yours. No barcode is shown.</small></span></label>
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" id="fNeedsCard"> Needs my store card <input id="fCardName" autocomplete="off" placeholder="e.g. More Card" style="flex:1;min-height:40px;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--slip);font-weight:400"></label>
+    <div class="field">
       <label for="fCard">Loyalty card ending <span class="sub">· optional, if the voucher is tied to a card</span></label>
       <input id="fCard" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="e.g. 1234">
     </div>
@@ -264,6 +363,14 @@ details img{display:block;width:100%;border-radius:0 0 10px 10px}
   </form>
 </div>
 
+<div class="overlay" id="qrOv" hidden role="dialog" aria-modal="true" aria-labelledby="qrTitle">
+  <div class="sheet">
+    <div class="bar"><button class="btn small" id="qrClose" type="button">Back</button><strong id="qrTitle">Open Till Ready elsewhere</strong><span style="width:62px"></span></div>
+    <div class="qrbig" id="qrBox"></div>
+    <p style="text-align:center;margin:0">Scan with another phone or tablet, or tap the link:<br><a class="link" id="qrLink" target="_blank" rel="noopener"></a></p>
+    <p class="hint" style="text-align:center">It opens when you're signed in to your Claude account on that device.</p>
+  </div>
+</div>
 <div class="toast" id="toast" hidden role="status"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
@@ -275,6 +382,26 @@ const SHOPS = ["Morrisons","Tesco","Sainsbury's","Asda","Aldi","Lidl","Co-op","W
 $('shops').innerHTML = SHOPS.map(s=>`<option value="${esc(s)}">`).join('');
 const FORMAT_NAMES = {CODE128:"Code 128",EAN13:"EAN-13",EAN8:"EAN-8",UPC:"UPC-A",ITF:"ITF",CODE39:"Code 39",QR:"QR code"};
 const LOCAL_KEY = 'tillready.v1';
+const SHOPS_KEY = 'tillready.shops.v1';
+const APP_URL = 'https://claude.ai/artifact/7br1yJwAiLQVTruyZETDue';
+/* What we've learned at real tills (pilot log V01/V02). Anything else starts as a first till test. */
+const SHOP_DEFAULTS = {
+  'morrisons': {status:'display', card:'More Card', cardWhen:'At the start of the shop, or at least before you pay. This voucher only works with your card.'},
+  "sainsbury's": {status:'remind', why:"Sainsbury's only accepts original coupons, so Till Ready reminds you instead of showing a barcode."}
+};
+const STATUS_NAMES = {display:'Display at till', first:'First till test', remind:'Remind only'};
+let shopRecs = {}, shopCol = null;
+function shopKey(n){return String(n||'').trim().toLowerCase()}
+function shopRec(n){const k=shopKey(n);return Object.assign({status:'first'},SHOP_DEFAULTS[k]||{},shopRecs[k]||{})}
+function tillStatus(v){return v.tillStatus||shopRec(v.shop).status}
+function needsCard(v){return v.needsCard!==undefined?v.needsCard:!!shopRec(v.shop).card}
+function cardName(v){return v.cardName||shopRec(v.shop).card||'store card'}
+async function saveShop(name,patch){
+  const k=shopKey(name); if(!k) return;
+  const rec=Object.assign({},shopRecs[k]||{},patch,{name:String(name).trim(),updatedAt:Date.now()}); shopRecs[k]=rec;
+  if(mode==='db'&&shopCol){await shopCol.doc(k.replace(/[^a-z0-9]+/g,'-')).set(JSON.parse(JSON.stringify(rec)))}
+  else{try{localStorage.setItem(SHOPS_KEY,JSON.stringify(shopRecs))}catch(e){}}
+}
 
 let vouchers = [], mode = 'loading', col = null, sample = null, tab = 'live';
 
@@ -357,6 +484,7 @@ async function initStore(){
   }
   if(db){
     mode='db'; col=db.collection('vouchers');
+    try{shopCol=db.collection('shops');shopCol.onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{const x=d.data();if(x&&x.name)o[shopKey(x.name)]=x});shopRecs=o;render();if(openId)refreshDetail()},()=>{})}catch(e){shopCol=null}
     let settled=false;
     const timer=setTimeout(()=>{if(!settled){$('storeNote').textContent='Your saved vouchers are taking a while to load. Check your signal.'}},10000);
     col.onSnapshot(snap=>{
@@ -365,7 +493,7 @@ async function initStore(){
       render(); if(openId) refreshDetail();
     },e=>{settled=true;clearTimeout(timer);$('storeNote').textContent='Lost the connection to your saved vouchers. Reopen the page to reconnect.'});
   } else {
-    mode='local'; vouchers=loadLocal(); render();
+    mode='local'; vouchers=loadLocal(); try{shopRecs=JSON.parse(localStorage.getItem(SHOPS_KEY)||'{}')}catch(e){shopRecs={}} render();
     $('storeNote').textContent='Saved on this phone only. Clearing your browser data will remove them.';
   }
 }
@@ -397,11 +525,17 @@ function render(){
     const b=document.createElement('button');b.type='button';b.className='slip'+(st.old?' dim':'');
     b.innerHTML=`<div class="slip-head"><span class="badge" style="background:hsl(${hue(v.shop)} 42% 36%)">${esc(initials(v.shop))}</span><span class="shop">${esc(v.shop||'Shop not set')}</span><span class="pill ${st.cls}">${esc(st.label)}</span></div>
       <p class="offer">${esc(v.offer||'Money-off voucher')}</p>
+      <div class="chips"></div>
       <div class="mini"></div>
       <div class="receipt-line">${v.expires?`<span>Valid until ${ukShort(v.expires)}</span>`:''}${v.card?`<span>Card …${esc(v.card)}</span>`:''}<span>${esc(FORMAT_NAMES[v.format]||'')}</span></div>`;
+    const ts=tillStatus(v), ch=[`<span class="chip ${ts}">${esc(ts==='remind'?'Remind only: bring the paper':STATUS_NAMES[ts])}</span>`];
+    if(needsCard(v)&&ts!=='remind') ch.push(`<span class="chip plain">Needs your ${esc(cardName(v))}</span>`);
+    if(!st.old) ch.push(`<span class="chip plain">${v.reminder==='set'?'Reminder set ✓':'No reminder yet'}</span>`);
+    b.querySelector('.chips').innerHTML=ch.join('');
     const mini=b.querySelector('.mini');
+    if(ts==='remind') mini.hidden=true;
     const r=renderCode(mini,v.code,v.format); if(!r.ok) mini.innerHTML=`<span class="receipt-line">${esc(v.code)}</span>`;
-    if(v.format==='QR') mini.hidden=true;
+    if(v.format==='QR'||ts==='remind') mini.hidden=true;
     b.onclick=()=>openDetail(v.id);
     wrap.appendChild(b);
     if(st.key==='used'||st.key==='expired'){const s=document.createElement('span');s.className='stamp';s.textContent=st.key==='used'?'USED':'EXPIRED';wrap.appendChild(s)}
@@ -413,7 +547,8 @@ $('tabLive').onclick=()=>setTab('live'); $('tabOld').onclick=()=>setTab('old');
 
 /* ---------- detail ---------- */
 let openId=null, wake=null;
-function openDetail(id){openId=id;$('dDelConfirm').hidden=true;$('dDel').hidden=false;refreshDetail();$('detail').hidden=false;$('detail').scrollTop=0;document.body.style.overflow='hidden';
+function hidePanels(){['dRefPanel','dPromote','dImgPanel','dCalPanel'].forEach(p=>$(p).hidden=true)}
+function openDetail(id){openId=id;hidePanels();$('dDelConfirm').hidden=true;$('dDel').hidden=false;refreshDetail();$('detail').hidden=false;$('detail').scrollTop=0;document.body.style.overflow='hidden';
   try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(w=>wake=w).catch(()=>{})}catch(e){}
   $('dClose').focus()}
 function closeDetail(){openId=null;$('detail').hidden=true;document.body.style.overflow='';try{wake&&wake.release()}catch(e){}wake=null}
@@ -438,11 +573,87 @@ function refreshDetail(){
   $('dFacts').innerHTML=f.map(([k,val])=>`<dt>${esc(k)}</dt><dd>${esc(val)}</dd>`).join('');
   $('dFacts').hidden=!f.length;
   $('dUsed').textContent=v.used?'Move back to ready':'Mark as used';
+  const ts=tillStatus(v), live=!st.old;
+  $('dCard').hidden=!(needsCard(v)&&ts!=='remind'&&live);
+  $('dCardText').innerHTML=`Scan your ${esc(cardName(v))} first<small>${esc(shopRec(v.shop).cardWhen||'At the start of the shop, or at least before you pay.')}</small>`;
+  $('dFirst').hidden=!(ts==='first'&&live);
+  $('dRemind').hidden=ts!=='remind'; $('dRemindWhy').textContent=shopRec(v.shop).why||'This voucher is set to Remind only, so no barcode is shown.';
+  $('dTill').hidden=ts==='remind'; document.querySelector('#detail .hint').hidden=ts==='remind';
+  $('dOutcome').hidden=!(live&&ts!=='remind'); $('dSaveImg').hidden=!(live&&ts!=='remind'); $('dRemindBtn').hidden=!live;
+  $('dTools').hidden=!live;
+  $('dRemindBtn').textContent=v.reminder==='set'?'📅 Reminder set ✓':'📅 Add reminder';
   if(v.photo){$('dPhotoWrap').hidden=false;$('dPhoto').src=v.photo}else $('dPhotoWrap').hidden=true;
 }
 $('dClose').onclick=closeDetail;
 $('dUsed').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;const nv=Object.assign({},v,{used:!v.used,usedAt:v.used?null:todayISO()});
-  $('dUsed').disabled=true;try{await persist(nv);toast(nv.used?'Marked as used':'Moved back to ready');if(nv.used)closeDetail();else refreshDetail()}catch(e){toast(errText(e))}finally{$('dUsed').disabled=false}};
+  $('dUsed').disabled=true;try{await persist(nv);toast(nv.used?(v.imageSaved?'Marked as used. Delete its picture from Downloads':'Marked as used'):'Moved back to ready');if(nv.used)closeDetail();else refreshDetail()}catch(e){toast(errText(e))}finally{$('dUsed').disabled=false}};
+function logOutcome(v,result,extra){const o=(v.outcomes||[]).slice();o.push(Object.assign({result,at:new Date().toISOString(),status:tillStatus(v)},extra||{}));return o}
+$('dAcc').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;const wasFirst=tillStatus(v)==='first';
+  const nv=Object.assign({},v,{used:true,usedAt:todayISO(),outcomes:logOutcome(v,'accepted')});
+  $('dAcc').disabled=true;try{await persist(nv);
+    if(wasFirst&&v.shop){hidePanels();$('dOutcome').hidden=true;$('dPromote').hidden=false;$('dPromoteText').textContent=`${v.shop} took it from the phone. Show future ${v.shop} vouchers as Display at till?`;$('dPromote').scrollIntoView({block:'center'})}
+    else{toast(v.imageSaved?'Accepted and marked as used. Delete its picture from Downloads':'Accepted and marked as used');closeDetail()}
+  }catch(e){toast(errText(e))}finally{$('dAcc').disabled=false}};
+$('dPromoteYes').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);try{if(v)await saveShop(v.shop,{status:'display',promotedAt:todayISO()});toast('Saved for next time');closeDetail()}catch(e){toast(errText(e))}};
+$('dPromoteNo').onclick=()=>closeDetail();
+let refReason=null;
+$('dRef').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;refReason=null;
+  document.querySelectorAll('#dReasons button').forEach(b=>b.setAttribute('aria-pressed','false'));
+  const nv=Object.assign({},v,{outcomes:logOutcome(v,'refused')});
+  try{await persist(nv);hidePanels();$('dRefPanel').hidden=false;$('dOutcome').hidden=true;$('dRefPanel').scrollIntoView({block:'center'})}catch(e){toast(errText(e))}};
+document.querySelectorAll('#dReasons button').forEach(b=>b.onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;
+  document.querySelectorAll('#dReasons button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));refReason=b.dataset.r;
+  const o=(v.outcomes||[]).slice();if(o.length&&o[o.length-1].result==='refused'){o[o.length-1]=Object.assign({},o[o.length-1],{reason:refReason})}
+  try{await persist(Object.assign({},v,{outcomes:o}))}catch(e){}});
+$('dToRemind').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;try{await persist(Object.assign({},v,{tillStatus:'remind'}));toast('Changed to Remind only');hidePanels();refreshDetail()}catch(e){toast(errText(e))}};
+$('dRefDone').onclick=()=>{toast('Kept. Use the paper voucher');closeDetail()};
+
+/* save barcode picture (no-signal fallback) */
+function barcodeCanvas(v){
+  const W=1080,H=720,c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,W,H);x.fillStyle='#000';x.textAlign='center';
+  x.font='700 44px Barlow, Arial, sans-serif';x.fillText((v.shop||'Voucher')+(v.expires?' · until '+ukShort(v.expires):''),W/2,70);
+  x.font='600 34px Barlow, Arial, sans-serif';x.fillText((v.offer||'').slice(0,60),W/2,120);
+  if(v.format==='QR'){const q=qrcode(0,'M');q.addData(v.code);q.make();const n=q.getModuleCount(),sz=Math.floor(420/n),ox=(W-sz*n)/2;
+    for(let r=0;r<n;r++)for(let k=0;k<n;k++)if(q.isDark(r,k))x.fillRect(ox+k*sz,160+r*sz,sz,sz)}
+  else{const bc=document.createElement('canvas');JsBarcode(bc,v.code,{format:v.format,displayValue:false,margin:40,width:4,height:380,background:'#ffffff',lineColor:'#000000'});
+    const s=Math.min(1,(W-40)/bc.width);x.drawImage(bc,(W-bc.width*s)/2,150,bc.width*s,380)}
+  x.font='600 40px "JetBrains Mono", monospace';x.fillText(v.code,W/2,630);
+  x.font='400 24px Barlow, Arial, sans-serif';x.fillStyle='#555';x.fillText('Till Ready · show at the till · delete once used',W/2,690);
+  return c;
+}
+$('dSaveImg').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;
+  try{const url=barcodeCanvas(v).toDataURL('image/png');$('dImg').src=url;hidePanels();$('dImgPanel').hidden=false;
+    const a=document.createElement('a');a.href=url;a.download=`till-ready-${(v.shop||'voucher').replace(/[^A-Za-z0-9]+/g,'-').toLowerCase()}-${v.expires||'no-date'}.png`;document.body.appendChild(a);a.click();a.remove();
+    if(!v.imageSaved)await persist(Object.assign({},v,{imageSaved:true}));
+    $('dImgPanel').scrollIntoView({block:'center'})}catch(e){toast('Couldn’t make the picture. Try again.')}};
+
+/* reminders: 3 days before + morning of the last day (James, 24 Nov 2026) */
+function ymd(d){return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')}
+function reminderSlots(v){if(!v.expires)return [];const [y,m,d]=v.expires.split('-').map(Number);const out=[];const n=daysLeft(v.expires);
+  if(n>3){const t=new Date(y,m-1,d-3);out.push({when:t,hour:'090000',end:'091500',label:'3 days before · '+t.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+', 9am'})}
+  if(n>=1){const t=new Date(y,m-1,d);out.push({when:t,hour:'080000',end:'081500',label:'Last day · '+t.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+', 8am'})}
+  return out}
+function calTitle(v){return `Use your ${v.shop||'shop'} voucher (ends ${ukShort(v.expires)})`}
+$('dRemindBtn').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;hidePanels();$('dCalPanel').hidden=false;
+  const slots=reminderSlots(v),L=$('dCalLinks');L.innerHTML='';
+  if(!v.expires){$('dCalText').textContent='Add the "Valid until" date first (Edit details), then add reminders.';$('dIcs').hidden=true;$('dCalDone').hidden=true}
+  else if(!slots.length){$('dCalText').textContent='This voucher ends today, so there is no time for a reminder. Use it on this shop.';$('dIcs').hidden=true;$('dCalDone').hidden=true}
+  else{$('dCalText').textContent='Tap each one to add it in Google Calendar, then save it there. The reminders hold no voucher numbers.';$('dIcs').hidden=false;$('dCalDone').hidden=false;
+    for(const s of slots){const a=document.createElement('a');a.className='btn';a.target='_blank';a.rel='noopener';
+      a.href='https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(calTitle(v))+'&dates='+ymd(s.when)+'T'+s.hour+'/'+ymd(s.when)+'T'+s.end+'&ctz=Europe/London&details='+encodeURIComponent('Open Till Ready: '+APP_URL);
+      a.textContent='＋ '+s.label;L.appendChild(a)}}
+  $('dCalPanel').scrollIntoView({block:'center'})};
+$('dIcs').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;const stamp=new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
+  const ev=reminderSlots(v).map((s,i)=>['BEGIN:VEVENT','UID:'+v.id+'-'+i+'@tillready','DTSTAMP:'+stamp,'DTSTART;TZID=Europe/London:'+ymd(s.when)+'T'+s.hour,'DTEND;TZID=Europe/London:'+ymd(s.when)+'T'+s.end,'SUMMARY:'+calTitle(v).replace(/[,;]/g,' '),'DESCRIPTION:Open Till Ready: '+APP_URL,'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+calTitle(v).replace(/[,;]/g,' '),'TRIGGER:PT0M','END:VALARM','END:VEVENT'].join('\r\n'));
+  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Till Ready//EN',...ev,'END:VCALENDAR'].join('\r\n');
+  const a=document.createElement('a');a.href='data:text/calendar;charset=utf-8,'+encodeURIComponent(ics);a.download='till-ready-reminders.ics';document.body.appendChild(a);a.click();a.remove()};
+$('dCalDone').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;try{await persist(Object.assign({},v,{reminder:'set'}));toast('Reminder marked as set');hidePanels();refreshDetail()}catch(e){toast(errText(e))}};
+
+/* open elsewhere */
+$('openQr').onclick=()=>{try{const q=qrcode(0,'M');q.addData(APP_URL);q.make();$('qrBox').innerHTML=q.createSvgTag({cellSize:4,margin:2,scalable:true})}catch(e){}
+  $('qrLink').href=APP_URL;$('qrLink').textContent=APP_URL;$('qrOv').hidden=false;document.body.style.overflow='hidden'};
+$('qrClose').onclick=()=>{$('qrOv').hidden=true;document.body.style.overflow=''};
 $('dEdit').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(v){closeDetail();openEditor(v)}};
 $('dCopy').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;
   const done=()=>toast('Number copied');
@@ -460,14 +671,20 @@ function openEditor(v,file){
   $('eTitle').textContent=v?'Edit voucher':'New voucher';
   $('fCode').value=draft.code||''; $('fFormat').value=draft.format||'CODE128'; $('fShop').value=draft.shop||'';
   $('fExp').value=draft.expires||''; $('fOffer').value=draft.offer||''; $('fCard').value=draft.card||''; $('fNotes').value=draft.notes||'';
+  statusTouched=!!draft.tillStatus; setStatusFields(draft);
   $('eErr').hidden=true; setStatus('','');
   if(draft.photo){$('ePhoto').src=draft.photo;$('ePhoto').hidden=false;$('retakeLbl').textContent='Retake photo'}else{$('ePhoto').hidden=true;$('retakeLbl').textContent='Take a photo'}
   refreshAskBtn(); updatePreview();
   $('editor').hidden=false;$('editor').scrollTop=0;document.body.style.overflow='hidden';
   if(file) handlePhoto(file); else if(!v) setTimeout(()=>$('fCode').focus(),50);
 }
+let statusTouched=false;
+function setStatusFields(d){const ts=d.tillStatus||shopRec(d.shop).status;document.querySelectorAll('#fStatus input').forEach(i=>i.checked=i.value===ts);
+  $('fNeedsCard').checked=d.needsCard!==undefined?d.needsCard:!!shopRec(d.shop).card;$('fCardName').value=d.cardName||shopRec(d.shop).card||''}
 function closeEditor(){$('editor').hidden=true;document.body.style.overflow='';draft=null;photoBlob=null}
 $('eClose').onclick=closeEditor;
+document.querySelectorAll('#fStatus input').forEach(i=>i.addEventListener('change',()=>statusTouched=true));
+$('fShop').addEventListener('input',()=>{if(!draft||statusTouched)return;setStatusFields({shop:$('fShop').value})});
 function setStatus(cls,html){const s=$('eStatus');if(!html){s.hidden=true;return}s.hidden=false;s.className='status'+(cls?' '+cls:'');s.innerHTML=html}
 function refreshAskBtn(){$('eAsk').hidden=!(sample&&photoBlob)}
 function updatePreview(){
@@ -546,7 +763,7 @@ Rules: "offer" is a short summary such as "£5 off when you spend £40" or "1000
     const d=await sample.json(prompt,{images:[photoBlob],modelTier:'quick'});
     let filled=[];
     if(d&&typeof d==='object'){
-      if(d.shop&&!$('fShop').value){$('fShop').value=d.shop;filled.push('shop')}
+      if(d.shop&&!$('fShop').value){$('fShop').value=d.shop;filled.push('shop');if(!statusTouched)setStatusFields({shop:d.shop})}
       if(d.offer){$('fOffer').value=d.offer;filled.push('offer')}
       if(d.expires&&/^\d{4}-\d{2}-\d{2}$/.test(d.expires)){$('fExp').value=d.expires;filled.push('date')}
       if(d.card_ending&&!$('fCard').value){$('fCard').value=String(d.card_ending).replace(/\D/g,'').slice(-4);filled.push('card')}
@@ -575,7 +792,9 @@ $('form').addEventListener('submit',async ev=>{
   if(!r.ok){err.textContent=r.msg;err.hidden=false;$('fFormat').focus();return}
   err.hidden=true;
   const v=Object.assign({},draft,{code,format:$('fFormat').value,shop:$('fShop').value.trim(),expires:$('fExp').value||null,offer:$('fOffer').value.trim(),
-    card:$('fCard').value.replace(/\D/g,'').slice(-4),notes:$('fNotes').value.trim(),updatedAt:Date.now()});
+    card:$('fCard').value.replace(/\D/g,'').slice(-4),notes:$('fNotes').value.trim(),updatedAt:Date.now(),
+    tillStatus:(document.querySelector('#fStatus input:checked')||{}).value||shopRec($('fShop').value).status,
+    needsCard:$('fNeedsCard').checked,cardName:$('fCardName').value.trim()||null});
   const btns=[...document.querySelectorAll('#form [type=submit]')];btns.forEach(b=>b.disabled=true);
   try{await persist(v);closeEditor();toast('Voucher saved');setTab(status(v).old?'old':'live')}
   catch(e){err.textContent=errText(e);err.hidden=false}
