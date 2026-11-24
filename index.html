@@ -208,6 +208,12 @@ a.link{color:var(--accent);font-weight:700;overflow-wrap:anywhere}
 
   <div class="list" id="list" role="tabpanel"></div>
   <p class="foot" id="storeNote"></p>
+  <div class="row-btns" id="backupRow">
+    <button class="btn" id="bkBtn" type="button">Back up now</button>
+    <label class="btn" for="rsFile">Restore a backup</label>
+    <input type="file" id="rsFile" accept="application/json,.json" hidden>
+  </div>
+  <div class="panel" id="cleanPanel" hidden><h3>Saved barcode pictures to delete</h3><p>These vouchers are used, expired or no longer shown at the till. Delete their pictures from your Downloads, then tick each one off.</p><div id="cleanList" style="display:flex;flex-direction:column;gap:8px"></div></div>
 </div>
 
 <!-- Show at till -->
@@ -242,7 +248,7 @@ a.link{color:var(--accent);font-weight:700;overflow-wrap:anywhere}
       <p>The voucher is still in your wallet. It hasn't been marked as used.</p>
       <p class="how">Why? (optional)</p>
       <div class="reasons" id="dReasons"><button type="button" data-r="wanted paper">Staff wanted the paper</button><button type="button" data-r="didn't scan">Didn't scan</button><button type="button" data-r="card not scanned">Card not scanned</button><button type="button" data-r="other">Other</button></div>
-      <button class="btn" id="dToRemind" type="button">Change to Remind only</button>
+      <button class="btn" id="dToRemind" type="button">Change to Remind only for this shop and voucher type</button>
       <button class="btn primary" id="dRefDone" type="button">Keep it and use the paper</button>
     </div>
     <div class="panel" id="dPromote" hidden>
@@ -256,10 +262,11 @@ a.link{color:var(--accent);font-weight:700;overflow-wrap:anywhere}
       <button class="btn outline" id="dRemindBtn" type="button">📅 Add reminder</button>
     </div>
     <div class="panel" id="dImgPanel" hidden>
-      <h3>Barcode saved for no-signal use</h3>
-      <p>It should be in your Downloads. If it didn't download, press and hold the picture below and choose Download image.</p>
+      <h3>Barcode picture for no-signal use</h3>
+      <p>It should now be in your Downloads. If it didn't download, press and hold the picture and choose Download image.</p>
       <img class="saveimg" id="dImg" alt="Barcode picture to save">
-      <p class="hint">Keep it in Downloads (not the camera folder) so it isn't backed up to Google Photos. Delete it once the voucher is used.</p>
+      <p class="hint">Before relying on it: in Google Photos, check Backup → Back up device folders, and make sure Download is switched off, so the picture stays on your phone. Test it once in airplane mode.</p>
+      <div class="row-btns"><button class="btn primary" id="dImgYes" type="button">It's saved</button><button class="btn" id="dImgNo" type="button">It didn't save</button></div>
     </div>
     <div class="panel" id="dCalPanel" hidden>
       <h3>Add reminders</h3>
@@ -342,9 +349,16 @@ a.link{color:var(--accent);font-weight:700;overflow-wrap:anywhere}
       <input id="fOffer" autocomplete="off" placeholder="e.g. £5 off when you spend £40">
     </div>
     <div class="field">
+      <label for="fKind">Voucher type</label>
+      <select id="fKind"><option value="">Choose…</option><option value="points">Points</option><option value="moneyoff">Money off a shop</option><option value="item">Money off an item</option><option value="other">Other</option></select>
+    </div>
+    <label class="check"><input type="checkbox" id="fMine"> It's mine (issued to my card, or given to me)</label>
+    <label class="check"><input type="checkbox" id="fTerms"> I've checked the terms don't say "originals only"</label>
+    <p class="hint" id="fEligNote"></p>
+    <div class="field">
       <span style="font-weight:700;font-size:.92rem">At the till</span>
       <div class="radios" id="fStatus">
-        <label><input type="radio" name="tst" value="display"><span>Display at till<small id="sDisplay">This shop has accepted this kind of voucher from the phone before.</small></span></label>
+        <label><input type="radio" name="tst" value="display"><span>Display at till<small id="sDisplay">Only for a shop and voucher type that has worked from the phone before.</small></span></label>
         <label><input type="radio" name="tst" value="first"><span>First till test<small>Not tried at this shop yet. Take the paper too.</small></span></label>
         <label><input type="radio" name="tst" value="remind"><span>Remind only<small>The shop wants the original, or it isn't yours. No barcode is shown.</small></span></label>
       </div>
@@ -384,23 +398,45 @@ const FORMAT_NAMES = {CODE128:"Code 128",EAN13:"EAN-13",EAN8:"EAN-8",UPC:"UPC-A"
 const LOCAL_KEY = 'tillready.v1';
 const SHOPS_KEY = 'tillready.shops.v1';
 const APP_URL = 'https://claude.ai/artifact/7br1yJwAiLQVTruyZETDue';
-/* What we've learned at real tills (pilot log V01/V02). Anything else starts as a first till test. */
+/* Eligibility (joint plan, round 2). Records are per retailer AND voucher type.
+   Anything not on record is Remind only until James confirms the voucher is his and its terms
+   don't say "originals only"; then it can be a First till test. Display at till needs a record
+   for that retailer and type, which only James creates (by approving after an accepted first test). */
+const KINDS = {points:'Points', moneyoff:'Money off', item:'Money off an item', other:'Other'};
 const SHOP_DEFAULTS = {
-  'morrisons': {status:'display', card:'More Card', cardWhen:'At the start of the shop, or at least before you pay. This voucher only works with your card.'},
-  "sainsbury's": {status:'remind', why:"Sainsbury's only accepts original coupons, so Till Ready reminds you instead of showing a barcode."}
+  'morrisons|points': {status:'display', card:'More Card', cardWhen:'At the start of the shop, or at least before you pay. This voucher only works with your card.', basis:'V01 accepted at a Morrisons till, 24 Nov 2026'},
+  'morrisons|*': {card:'More Card', cardWhen:'At the start of the shop, or at least before you pay. This voucher only works with your card.'},
+  "sainsbury's|*": {status:'locked', why:"Sainsbury's only accepts original coupons, so Till Ready reminds you instead of showing a barcode."}
 };
 const STATUS_NAMES = {display:'Display at till', first:'First till test', remind:'Remind only'};
-let shopRecs = {}, shopCol = null;
+const RANK = {remind:0, first:1, display:2};
+let shopRecs = {}, shopCol = null, metaCol = null, lastBackup = null, storeMsg = '';
+function footNote(){$('storeNote').textContent=storeMsg+(storeMsg?' ':'')+'Last backup: '+(lastBackup?ukLong(lastBackup.slice(0,10)):'never')+'.'}
 function shopKey(n){return String(n||'').trim().toLowerCase()}
-function shopRec(n){const k=shopKey(n);return Object.assign({status:'first'},SHOP_DEFAULTS[k]||{},shopRecs[k]||{})}
-function tillStatus(v){return v.tillStatus||shopRec(v.shop).status}
-function needsCard(v){return v.needsCard!==undefined?v.needsCard:!!shopRec(v.shop).card}
-function cardName(v){return v.cardName||shopRec(v.shop).card||'store card'}
-async function saveShop(name,patch){
-  const k=shopKey(name); if(!k) return;
-  const rec=Object.assign({},shopRecs[k]||{},patch,{name:String(name).trim(),updatedAt:Date.now()}); shopRecs[k]=rec;
-  if(mode==='db'&&shopCol){await shopCol.doc(k.replace(/[^a-z0-9]+/g,'-')).set(JSON.parse(JSON.stringify(rec)))}
-  else{try{localStorage.setItem(SHOPS_KEY,JSON.stringify(shopRecs))}catch(e){}}
+function recKey(shop,kind){return shopKey(shop)+'|'+(kind||'unknown')}
+function shopRec(shop,kind){const k=shopKey(shop);return Object.assign({},SHOP_DEFAULTS[k+'|*']||{},SHOP_DEFAULTS[recKey(shop,kind)]||{},shopRecs[k+'|*']||{},shopRecs[recKey(shop,kind)]||{})}
+/* Highest status this voucher is allowed, checked every time it is shown or used. */
+function allowed(v){
+  const r=shopRec(v.shop,v.kind);
+  if(!v.kind||!v.shop) return {max:'remind',why:'Check the shop and voucher type first (Edit details).'};
+  if(r.status==='locked') return {max:'remind',why:r.why||'This shop only accepts originals.'};
+  if(v.mine===false) return {max:'remind',why:"This voucher isn't yours, so it can't be used from the phone."};
+  if(v.mine!==true) return {max:'remind',why:'Confirm it\'s your voucher first (Edit details).'};
+  if(r.status==='remind') return {max:'remind',why:r.why||'Set to Remind only for this shop and voucher type.'};
+  if(r.status==='display') return {max:'display'};
+  if(v.termsChecked!==true) return {max:'remind',why:'Check the terms don\'t say "originals only" first (Edit details).'};
+  return {max:'first'};
+}
+function tillStatus(v){const a=allowed(v).max, want=v.tillStatus||a;return RANK[want]<=RANK[a]?want:a}
+function canShowBarcode(v){return !status(v).old && tillStatus(v)!=='remind'}
+function needsCard(v){return v.needsCard!==undefined?v.needsCard:!!shopRec(v.shop,v.kind).card}
+function cardName(v){return v.cardName||shopRec(v.shop,v.kind).card||'store card'}
+/* Saves a retailer+type record. Memory only changes after the save succeeds; errors are shown to James. */
+async function saveShop(shop,kind,patch){
+  const k=recKey(shop,kind); if(!shopKey(shop)||!kind) throw {code:'invalid_argument'};
+  const rec=Object.assign({},shopRecs[k]||{},patch,{name:String(shop).trim(),kind,key:k,updatedAt:Date.now()});
+  if(mode==='db'){if(!shopCol) throw {code:'unavailable'};await shopCol.doc(k.replace(/[^a-z0-9|]+/g,'-').replace('|','--')).set(JSON.parse(JSON.stringify(rec)));shopRecs[k]=rec}
+  else{const next=Object.assign({},shopRecs,{[k]:rec});localStorage.setItem(SHOPS_KEY,JSON.stringify(next));shopRecs=next}
 }
 
 let vouchers = [], mode = 'loading', col = null, sample = null, tab = 'live';
@@ -484,17 +520,18 @@ async function initStore(){
   }
   if(db){
     mode='db'; col=db.collection('vouchers');
-    try{shopCol=db.collection('shops');shopCol.onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{const x=d.data();if(x&&x.name)o[shopKey(x.name)]=x});shopRecs=o;render();if(openId)refreshDetail()},()=>{})}catch(e){shopCol=null}
+    try{shopCol=db.collection('shops');shopCol.onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{const x=d.data();if(x&&x.key)o[x.key]=x});shopRecs=o;render();if(openId)refreshDetail()},()=>{toast('Couldn’t load shop records. Using safe defaults.')})}catch(e){shopCol=null}
+    try{metaCol=db.collection('meta');metaCol.onSnapshot(snap=>{const d=snap.docs.find(x=>x.id==='backup');lastBackup=d?d.data().at:null;footNote()},()=>{})}catch(e){metaCol=null}
     let settled=false;
     const timer=setTimeout(()=>{if(!settled){$('storeNote').textContent='Your saved vouchers are taking a while to load. Check your signal.'}},10000);
     col.onSnapshot(snap=>{
       vouchers=snap.docs.map(d=>Object.assign({},d.data(),{id:d.id}));
-      if(!snap.metadata.fromCache){settled=true;clearTimeout(timer);$('storeNote').textContent='Saved to your Claude account, so your vouchers are here on any device you sign in on.'}
+      if(!snap.metadata.fromCache){settled=true;clearTimeout(timer);storeMsg='Saved to your Claude account, so your vouchers are here on any device you sign in on.';footNote()}
       render(); if(openId) refreshDetail();
     },e=>{settled=true;clearTimeout(timer);$('storeNote').textContent='Lost the connection to your saved vouchers. Reopen the page to reconnect.'});
   } else {
-    mode='local'; vouchers=loadLocal(); try{shopRecs=JSON.parse(localStorage.getItem(SHOPS_KEY)||'{}')}catch(e){shopRecs={}} render();
-    $('storeNote').textContent='Saved on this phone only. Clearing your browser data will remove them.';
+    mode='local'; vouchers=loadLocal(); try{shopRecs=JSON.parse(localStorage.getItem(SHOPS_KEY)||'{}')}catch(e){shopRecs={}} try{lastBackup=localStorage.getItem('tillready.lastBackup')}catch(e){} render(); footNote();
+    storeMsg='Saved on this phone only. Clearing your browser data will remove them.';footNote();
   }
 }
 
@@ -502,7 +539,7 @@ async function initStore(){
 function hue(s){let h=0;for(const ch of (s||'?'))h=(h*31+ch.charCodeAt(0))%360;return h}
 function initials(s){s=(s||'?').replace(/[^A-Za-z0-9& ]/g,'').trim();const p=s.split(/\s+/);return (p.length>1?p[0][0]+p[1][0]:s.slice(0,2)).toUpperCase()||'?'}
 function sortLive(a,b){const x=a.expires||'9999',y=b.expires||'9999';return x<y?-1:x>y?1:(b.createdAt||0)-(a.createdAt||0)}
-function render(){
+function render(){try{renderCleanup()}catch(e){}
   const live=vouchers.filter(v=>!status(v).old).sort(sortLive);
   const old=vouchers.filter(v=>status(v).old).sort((a,b)=>(b.usedAt||b.expires||'')>(a.usedAt||a.expires||'')?1:-1);
   $('nLive').textContent=live.length?live.length:''; $('nOld').textContent=old.length?old.length:'';
@@ -528,14 +565,14 @@ function render(){
       <div class="chips"></div>
       <div class="mini"></div>
       <div class="receipt-line">${v.expires?`<span>Valid until ${ukShort(v.expires)}</span>`:''}${v.card?`<span>Card …${esc(v.card)}</span>`:''}<span>${esc(FORMAT_NAMES[v.format]||'')}</span></div>`;
-    const ts=tillStatus(v), ch=[`<span class="chip ${ts}">${esc(ts==='remind'?'Remind only: bring the paper':STATUS_NAMES[ts])}</span>`];
+    const ts=tillStatus(v), ch=[`<span class="chip ${ts}">${esc(ts==='remind'?(allowed(v).why&&!v.kind?'Needs checking':'Remind only: bring the paper'):STATUS_NAMES[ts])}</span>`];
     if(needsCard(v)&&ts!=='remind') ch.push(`<span class="chip plain">Needs your ${esc(cardName(v))}</span>`);
     if(!st.old) ch.push(`<span class="chip plain">${v.reminder==='set'?'Reminder set ✓':'No reminder yet'}</span>`);
     b.querySelector('.chips').innerHTML=ch.join('');
     const mini=b.querySelector('.mini');
-    if(ts==='remind') mini.hidden=true;
+    if(!canShowBarcode(v)) mini.hidden=true;
     const r=renderCode(mini,v.code,v.format); if(!r.ok) mini.innerHTML=`<span class="receipt-line">${esc(v.code)}</span>`;
-    if(v.format==='QR'||ts==='remind') mini.hidden=true;
+    if(v.format==='QR'||!canShowBarcode(v)) mini.hidden=true;
     b.onclick=()=>openDetail(v.id);
     wrap.appendChild(b);
     if(st.key==='used'||st.key==='expired'){const s=document.createElement('span');s.className='stamp';s.textContent=st.key==='used'?'USED':'EXPIRED';wrap.appendChild(s)}
@@ -547,7 +584,7 @@ $('tabLive').onclick=()=>setTab('live'); $('tabOld').onclick=()=>setTab('old');
 
 /* ---------- detail ---------- */
 let openId=null, wake=null;
-function hidePanels(){['dRefPanel','dPromote','dImgPanel','dCalPanel'].forEach(p=>$(p).hidden=true)}
+function hidePanels(){['dRefPanel','dPromote','dImgPanel','dCalPanel'].forEach(p=>$(p).hidden=true);$('dImg').removeAttribute('src');pendingImg=null}
 function openDetail(id){openId=id;hidePanels();$('dDelConfirm').hidden=true;$('dDel').hidden=false;refreshDetail();$('detail').hidden=false;$('detail').scrollTop=0;document.body.style.overflow='hidden';
   try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(w=>wake=w).catch(()=>{})}catch(e){}
   $('dClose').focus()}
@@ -575,10 +612,12 @@ function refreshDetail(){
   $('dUsed').textContent=v.used?'Move back to ready':'Mark as used';
   const ts=tillStatus(v), live=!st.old;
   $('dCard').hidden=!(needsCard(v)&&ts!=='remind'&&live);
-  $('dCardText').innerHTML=`Scan your ${esc(cardName(v))} first<small>${esc(shopRec(v.shop).cardWhen||'At the start of the shop, or at least before you pay.')}</small>`;
+  $('dCardText').innerHTML=`Scan your ${esc(cardName(v))} first<small>${esc(shopRec(v.shop,v.kind).cardWhen||'At the start of the shop, or at least before you pay.')}</small>`;
   $('dFirst').hidden=!(ts==='first'&&live);
-  $('dRemind').hidden=ts!=='remind'; $('dRemindWhy').textContent=shopRec(v.shop).why||'This voucher is set to Remind only, so no barcode is shown.';
-  $('dTill').hidden=ts==='remind'; document.querySelector('#detail .hint').hidden=ts==='remind';
+  $('dRemind').hidden=!(ts==='remind'&&live);
+  const showBc=canShowBarcode(v);
+  $('dTill').hidden=!showBc; document.querySelector('#detail .hint').hidden=!showBc;
+  $('dRemindWhy').textContent=allowed(v).why||shopRec(v.shop,v.kind).why||'This voucher is set to Remind only, so no barcode is shown.';
   $('dOutcome').hidden=!(live&&ts!=='remind'); $('dSaveImg').hidden=!(live&&ts!=='remind'); $('dRemindBtn').hidden=!live;
   $('dTools').hidden=!live;
   $('dRemindBtn').textContent=v.reminder==='set'?'📅 Reminder set ✓':'📅 Add reminder';
@@ -588,24 +627,28 @@ $('dClose').onclick=closeDetail;
 $('dUsed').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;const nv=Object.assign({},v,{used:!v.used,usedAt:v.used?null:todayISO()});
   $('dUsed').disabled=true;try{await persist(nv);toast(nv.used?(v.imageSaved?'Marked as used. Delete its picture from Downloads':'Marked as used'):'Moved back to ready');if(nv.used)closeDetail();else refreshDetail()}catch(e){toast(errText(e))}finally{$('dUsed').disabled=false}};
 function logOutcome(v,result,extra){const o=(v.outcomes||[]).slice();o.push(Object.assign({result,at:new Date().toISOString(),status:tillStatus(v)},extra||{}));return o}
-$('dAcc').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;const wasFirst=tillStatus(v)==='first';
+let busy=false;
+$('dAcc').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v||busy)return;if(!canShowBarcode(v)){toast('This voucher can’t be used at the till.');return}busy=true;const wasFirst=tillStatus(v)==='first';
   const nv=Object.assign({},v,{used:true,usedAt:todayISO(),outcomes:logOutcome(v,'accepted')});
   $('dAcc').disabled=true;try{await persist(nv);
-    if(wasFirst&&v.shop){hidePanels();$('dOutcome').hidden=true;$('dPromote').hidden=false;$('dPromoteText').textContent=`${v.shop} took it from the phone. Show future ${v.shop} vouchers as Display at till?`;$('dPromote').scrollIntoView({block:'center'})}
-    else{toast(v.imageSaved?'Accepted and marked as used. Delete its picture from Downloads':'Accepted and marked as used');closeDetail()}
-  }catch(e){toast(errText(e))}finally{$('dAcc').disabled=false}};
-$('dPromoteYes').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);try{if(v)await saveShop(v.shop,{status:'display',promotedAt:todayISO()});toast('Saved for next time');closeDetail()}catch(e){toast(errText(e))}};
+    const pic=v.imageSaved&&(v.imageFiles||[]).length?' Delete its picture from Downloads.':'';
+    if(wasFirst&&v.shop&&v.kind){hidePanels();$('dOutcome').hidden=true;$('dPromote').hidden=false;$('dPromoteText').textContent=`${v.shop} took it from the phone.${pic} Show future ${v.shop} ${KINDS[v.kind].toLowerCase()} vouchers as Display at till? This covers that voucher type only.`;$('dPromote').scrollIntoView({block:'center'})}
+    else{toast('Accepted and marked as used.'+pic);closeDetail()}
+  }catch(e){toast(errText(e))}finally{$('dAcc').disabled=false;busy=false}};
+$('dPromoteYes').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;try{await saveShop(v.shop,v.kind,{status:'display',promotedAt:todayISO(),basis:'Accepted first till test, approved by James in the app'});toast('Saved for next time');closeDetail()}catch(e){toast('Couldn’t save that for next time. '+errText(e))}};
 $('dPromoteNo').onclick=()=>closeDetail();
 let refReason=null;
-$('dRef').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;refReason=null;
+$('dRef').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v||busy)return;if(!canShowBarcode(v)){toast('This voucher can’t be used at the till.');return}busy=true;refReason=null;$('dRef').disabled=true;
   document.querySelectorAll('#dReasons button').forEach(b=>b.setAttribute('aria-pressed','false'));
   const nv=Object.assign({},v,{outcomes:logOutcome(v,'refused')});
-  try{await persist(nv);hidePanels();$('dRefPanel').hidden=false;$('dOutcome').hidden=true;$('dRefPanel').scrollIntoView({block:'center'})}catch(e){toast(errText(e))}};
+  try{await persist(nv);hidePanels();$('dRefPanel').hidden=false;$('dOutcome').hidden=true;$('dRefPanel').scrollIntoView({block:'center'})}catch(e){toast(errText(e))}finally{busy=false;$('dRef').disabled=false}};
 document.querySelectorAll('#dReasons button').forEach(b=>b.onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;
   document.querySelectorAll('#dReasons button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));refReason=b.dataset.r;
   const o=(v.outcomes||[]).slice();if(o.length&&o[o.length-1].result==='refused'){o[o.length-1]=Object.assign({},o[o.length-1],{reason:refReason})}
-  try{await persist(Object.assign({},v,{outcomes:o}))}catch(e){}});
-$('dToRemind').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;try{await persist(Object.assign({},v,{tillStatus:'remind'}));toast('Changed to Remind only');hidePanels();refreshDetail()}catch(e){toast(errText(e))}};
+  try{await persist(Object.assign({},v,{outcomes:o}))}catch(e){toast('Couldn’t save the reason. '+errText(e))}});
+$('dToRemind').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;
+  try{await persist(Object.assign({},v,{tillStatus:'remind'}));if(v.shop&&v.kind)await saveShop(v.shop,v.kind,{status:'remind',why:'Refused at the till on '+ukLong(todayISO())+', so set to Remind only.'});
+    toast('Changed to Remind only for '+(v.shop||'this shop')+(v.kind?' '+KINDS[v.kind].toLowerCase()+' vouchers':''));hidePanels();refreshDetail()}catch(e){toast(errText(e))}};
 $('dRefDone').onclick=()=>{toast('Kept. Use the paper voucher');closeDetail()};
 
 /* save barcode picture (no-signal fallback) */
@@ -619,33 +662,52 @@ function barcodeCanvas(v){
   else{const bc=document.createElement('canvas');JsBarcode(bc,v.code,{format:v.format,displayValue:false,margin:40,width:4,height:380,background:'#ffffff',lineColor:'#000000'});
     const s=Math.min(1,(W-40)/bc.width);x.drawImage(bc,(W-bc.width*s)/2,150,bc.width*s,380)}
   x.font='600 40px "JetBrains Mono", monospace';x.fillText(v.code,W/2,630);
-  x.font='400 24px Barlow, Arial, sans-serif';x.fillStyle='#555';x.fillText('Till Ready · show at the till · delete once used',W/2,690);
+  const tips=[];if(needsCard(v))tips.push('Scan your '+cardName(v)+' first');if(tillStatus(v)==='first')tips.push('First till test: have the paper too');tips.push('delete once used');
+  x.font='600 26px Barlow, Arial, sans-serif';x.fillStyle='#333';x.fillText(tips.join(' · '),W/2,690);
   return c;
 }
-$('dSaveImg').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;
+let pendingImg=null;
+$('dSaveImg').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;if(!canShowBarcode(v)){toast('This voucher can’t be shown at the till.');return}
   try{const url=barcodeCanvas(v).toDataURL('image/png');$('dImg').src=url;hidePanels();$('dImgPanel').hidden=false;
-    const a=document.createElement('a');a.href=url;a.download=`till-ready-${(v.shop||'voucher').replace(/[^A-Za-z0-9]+/g,'-').toLowerCase()}-${v.expires||'no-date'}.png`;document.body.appendChild(a);a.click();a.remove();
-    if(!v.imageSaved)await persist(Object.assign({},v,{imageSaved:true}));
+    pendingImg=`till-ready-${(v.shop||'voucher').replace(/[^A-Za-z0-9]+/g,'-').toLowerCase()}-${v.expires||'no-date'}-${Math.random().toString(36).slice(2,6)}.png`;
+    const a=document.createElement('a');a.href=url;a.download=pendingImg;document.body.appendChild(a);a.click();a.remove();
     $('dImgPanel').scrollIntoView({block:'center'})}catch(e){toast('Couldn’t make the picture. Try again.')}};
+$('dImgYes').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v||!pendingImg)return;const files=(v.imageFiles||[]).concat([pendingImg]);
+  try{await persist(Object.assign({},v,{imageSaved:true,imageFiles:files}));toast('Noted. You’ll be reminded to delete it once used');hidePanels()}catch(e){toast(errText(e))}};
+$('dImgNo').onclick=()=>{pendingImg=null;toast('Press and hold the picture to save it, or try again');};
+function needsCleanup(v){return v.imageSaved&&(v.imageFiles||[]).length&&(status(v).old||tillStatus(v)==='remind')}
+function renderCleanup(){const list=vouchers.filter(needsCleanup);$('cleanPanel').hidden=!list.length;
+  $('cleanList').innerHTML=list.map(v=>`<div class="check" style="justify-content:space-between"><span>${esc(v.shop||'Voucher')}: ${(v.imageFiles||[]).map(esc).join(', ')}</span><button class="btn small" data-clean="${esc(v.id)}" type="button">Deleted</button></div>`).join('');
+  $('cleanList').querySelectorAll('[data-clean]').forEach(b=>b.onclick=async()=>{const v=vouchers.find(x=>x.id===b.dataset.clean);if(!v)return;
+    try{await persist(Object.assign({},v,{imageSaved:false,imageFiles:[]}))}catch(e){toast(errText(e))}})}
 
 /* reminders: 3 days before + morning of the last day (James, 24 Nov 2026) */
 function ymd(d){return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')}
-function reminderSlots(v){if(!v.expires)return [];const [y,m,d]=v.expires.split('-').map(Number);const out=[];const n=daysLeft(v.expires);
-  if(n>3){const t=new Date(y,m-1,d-3);out.push({when:t,hour:'090000',end:'091500',label:'3 days before · '+t.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+', 9am'})}
-  if(n>=1){const t=new Date(y,m-1,d);out.push({when:t,hour:'080000',end:'081500',label:'Last day · '+t.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+', 8am'})}
+function nowDate(){return window.__tillNow?new Date(window.__tillNow):new Date()}
+/* 3 days before at 9am and the last day at 8am (James, 24 Nov 2026), only if still in the future.
+   If neither is left but the voucher is still valid, one reminder 15 minutes from now. */
+function reminderSlots(v){if(!v.expires)return [];const [y,m,d]=v.expires.split('-').map(Number);const now=nowDate();
+  const end=new Date(y,m-1,d,23,59);if(end<now)return [];
+  const fmt=t=>t.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+', '+t.toLocaleTimeString('en-GB',{hour:'numeric',minute:'2-digit'});
+  const out=[];
+  const a=new Date(y,m-1,d-3,9,0); if(a>now) out.push({when:a,label:'3 days before · '+fmt(a)});
+  const b=new Date(y,m-1,d,8,0); if(b>now) out.push({when:b,label:'Last day · '+fmt(b)});
+  if(!out.length){const c=new Date(Math.ceil((now.getTime()+15*60e3)/(5*60e3))*5*60e3);if(c<end)out.push({when:c,label:'Today · '+fmt(c)})}
   return out}
+function icsTime(t){return ymd(t)+'T'+String(t.getHours()).padStart(2,'0')+String(t.getMinutes()).padStart(2,'0')+'00'}
 function calTitle(v){return `Use your ${v.shop||'shop'} voucher (ends ${ukShort(v.expires)})`}
 $('dRemindBtn').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;hidePanels();$('dCalPanel').hidden=false;
   const slots=reminderSlots(v),L=$('dCalLinks');L.innerHTML='';
   if(!v.expires){$('dCalText').textContent='Add the "Valid until" date first (Edit details), then add reminders.';$('dIcs').hidden=true;$('dCalDone').hidden=true}
-  else if(!slots.length){$('dCalText').textContent='This voucher ends today, so there is no time for a reminder. Use it on this shop.';$('dIcs').hidden=true;$('dCalDone').hidden=true}
-  else{$('dCalText').textContent='Tap each one to add it in Google Calendar, then save it there. The reminders hold no voucher numbers.';$('dIcs').hidden=false;$('dCalDone').hidden=false;
+  else if(!slots.length){$('dCalText').textContent='This voucher has run out, so there is nothing to remind you about.';$('dIcs').hidden=true;$('dCalDone').hidden=true}
+  else{$('dCalText').textContent='Tap each one to add it in Google Calendar and save it there. Check the event has a notification. The reminders hold no voucher numbers.';$('dIcs').hidden=false;$('dCalDone').hidden=false;
     for(const s of slots){const a=document.createElement('a');a.className='btn';a.target='_blank';a.rel='noopener';
-      a.href='https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(calTitle(v))+'&dates='+ymd(s.when)+'T'+s.hour+'/'+ymd(s.when)+'T'+s.end+'&ctz=Europe/London&details='+encodeURIComponent('Open Till Ready: '+APP_URL);
+      const e=new Date(s.when.getTime()+15*60e3);
+      a.href='https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(calTitle(v))+'&dates='+icsTime(s.when)+'/'+icsTime(e)+'&ctz=Europe/London&details='+encodeURIComponent('Open Till Ready: '+APP_URL);
       a.textContent='＋ '+s.label;L.appendChild(a)}}
   $('dCalPanel').scrollIntoView({block:'center'})};
 $('dIcs').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;const stamp=new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z';
-  const ev=reminderSlots(v).map((s,i)=>['BEGIN:VEVENT','UID:'+v.id+'-'+i+'@tillready','DTSTAMP:'+stamp,'DTSTART;TZID=Europe/London:'+ymd(s.when)+'T'+s.hour,'DTEND;TZID=Europe/London:'+ymd(s.when)+'T'+s.end,'SUMMARY:'+calTitle(v).replace(/[,;]/g,' '),'DESCRIPTION:Open Till Ready: '+APP_URL,'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+calTitle(v).replace(/[,;]/g,' '),'TRIGGER:PT0M','END:VALARM','END:VEVENT'].join('\r\n'));
+  const ev=reminderSlots(v).map((s,i)=>['BEGIN:VEVENT','UID:'+uid()+'@tillready','DTSTAMP:'+stamp,'DTSTART;TZID=Europe/London:'+icsTime(s.when),'DTEND;TZID=Europe/London:'+icsTime(new Date(s.when.getTime()+15*60e3)),'SUMMARY:'+calTitle(v).replace(/[,;]/g,' '),'DESCRIPTION:Open Till Ready: '+APP_URL,'BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+calTitle(v).replace(/[,;]/g,' '),'TRIGGER:PT0M','END:VALARM','END:VEVENT'].join('\r\n'));
   const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Till Ready//EN',...ev,'END:VCALENDAR'].join('\r\n');
   const a=document.createElement('a');a.href='data:text/calendar;charset=utf-8,'+encodeURIComponent(ics);a.download='till-ready-reminders.ics';document.body.appendChild(a);a.click();a.remove()};
 $('dCalDone').onclick=async()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;try{await persist(Object.assign({},v,{reminder:'set'}));toast('Reminder marked as set');hidePanels();refreshDetail()}catch(e){toast(errText(e))}};
@@ -661,7 +723,7 @@ $('dCopy').onclick=()=>{const v=vouchers.find(x=>x.id===openId);if(!v)return;
 function selectDigits(){const r=document.createRange();r.selectNodeContents($('dDigits'));const s=getSelection();s.removeAllRanges();s.addRange(r);toast('Number selected, tap Copy')}
 $('dDel').onclick=()=>{$('dDel').hidden=true;$('dDelConfirm').hidden=false};
 $('dDelNo').onclick=()=>{$('dDel').hidden=false;$('dDelConfirm').hidden=true};
-$('dDelYes').onclick=async()=>{const id=openId;try{await remove(id);closeDetail();toast('Voucher deleted')}catch(e){toast('Couldn’t delete just now. Try again.')}};
+$('dDelYes').onclick=async()=>{const id=openId;const v=vouchers.find(x=>x.id===id);try{await remove(id);closeDetail();toast(v&&v.imageSaved&&(v.imageFiles||[]).length?'Deleted. Also delete '+v.imageFiles.join(', ')+' from Downloads':'Voucher deleted')}catch(e){toast('Couldn’t delete just now. Try again.')}};
 
 /* ---------- editor ---------- */
 let draft=null, photoBlob=null, photoBusy=false;
@@ -679,12 +741,22 @@ function openEditor(v,file){
   if(file) handlePhoto(file); else if(!v) setTimeout(()=>$('fCode').focus(),50);
 }
 let statusTouched=false;
-function setStatusFields(d){const ts=d.tillStatus||shopRec(d.shop).status;document.querySelectorAll('#fStatus input').forEach(i=>i.checked=i.value===ts);
-  $('fNeedsCard').checked=d.needsCard!==undefined?d.needsCard:!!shopRec(d.shop).card;$('fCardName').value=d.cardName||shopRec(d.shop).card||''}
+function formVoucher(){return {shop:$('fShop').value.trim(),kind:$('fKind').value||null,mine:$('fMine').checked,termsChecked:$('fTerms').checked}}
+/* Re-derives what's allowed whenever the shop, type, ownership or terms change; options above that are disabled. */
+function syncEligibility(keepChoice){const fv=formVoucher(),a=allowed(fv);
+  document.querySelectorAll('#fStatus input').forEach(i=>{i.disabled=RANK[i.value]>RANK[a.max];i.closest('label').style.opacity=i.disabled?.45:1});
+  const cur=(document.querySelector('#fStatus input:checked')||{}).value;
+  if(!keepChoice||!cur||RANK[cur]>RANK[a.max]) document.querySelectorAll('#fStatus input').forEach(i=>i.checked=i.value===a.max);
+  $('fEligNote').textContent=a.why||(a.max==='display'?'This shop and voucher type has worked from the phone before.':'');
+  const r=shopRec(fv.shop,fv.kind);if(!$('fCardName').dataset.touched){$('fNeedsCard').checked=!!r.card;$('fCardName').value=r.card||''}}
+function setStatusFields(d){$('fKind').value=d.kind||'';$('fMine').checked=d.mine===true;$('fTerms').checked=d.termsChecked===true;$('fCardName').dataset.touched='';
+  if(d.needsCard!==undefined||d.cardName){$('fNeedsCard').checked=!!d.needsCard;$('fCardName').value=d.cardName||'';$('fCardName').dataset.touched='1'}
+  document.querySelectorAll('#fStatus input').forEach(i=>i.checked=i.value===(d.tillStatus||''));syncEligibility(!!d.tillStatus)}
 function closeEditor(){$('editor').hidden=true;document.body.style.overflow='';draft=null;photoBlob=null}
 $('eClose').onclick=closeEditor;
 document.querySelectorAll('#fStatus input').forEach(i=>i.addEventListener('change',()=>statusTouched=true));
-$('fShop').addEventListener('input',()=>{if(!draft||statusTouched)return;setStatusFields({shop:$('fShop').value})});
+['fShop','fKind','fMine','fTerms'].forEach(id=>$(id).addEventListener(id==='fShop'?'input':'change',()=>{if(draft)syncEligibility(statusTouched)}));
+['fNeedsCard','fCardName'].forEach(id=>$(id).addEventListener('input',()=>$('fCardName').dataset.touched='1'));
 function setStatus(cls,html){const s=$('eStatus');if(!html){s.hidden=true;return}s.hidden=false;s.className='status'+(cls?' '+cls:'');s.innerHTML=html}
 function refreshAskBtn(){$('eAsk').hidden=!(sample&&photoBlob)}
 function updatePreview(){
@@ -757,16 +829,20 @@ $('eAsk').onclick=async()=>{
   if(!sample||!photoBlob)return;
   const btn=$('eAsk');btn.disabled=true;btn.innerHTML='<span class="spin" aria-hidden="true"></span>Reading the voucher…';
   const prompt=`This photo shows a UK supermarket or shop money-off voucher or coupon, often on faded thermal till-receipt paper and possibly rotated. Read it and reply with JSON only, in this shape:
-{"shop": string|null, "offer": string|null, "expires": "YYYY-MM-DD"|null, "card_ending": string|null, "code": string|null, "conditions": string|null}
-Rules: "offer" is a short summary such as "£5 off when you spend £40" or "1000 More Points when you spend £30". Dates on UK vouchers are DD/MM/YY, so 04/11/26 is "2026-11-04". "card_ending" is only the last digits of a loyalty card if the voucher names one. "code" is the number printed under the barcode, digits exactly as printed with no spaces. "conditions" is one short line of the key restrictions. Use null for anything you cannot read.`;
+{"shop": string|null, "offer": string|null, "kind": "points"|"moneyoff"|"item"|"other"|null, "expires": "YYYY-MM-DD"|null, "card_ending": string|null, "code": string|null, "conditions": string|null}
+Rules: "offer" is a short summary such as "£5 off when you spend £40" or "1000 More Points when you spend £30". Dates on UK vouchers are DD/MM/YY, so 04/11/26 is "2026-11-04". "card_ending" is only the last digits of a loyalty card if the voucher names one. "code" is the number printed under the barcode, digits exactly as printed with no spaces. "kind" is points for loyalty points offers, moneyoff for money off a whole shop, item for money off a named product. "conditions" is one short line of the key restrictions, and must mention it if the voucher says only originals are accepted. Use null for anything you cannot read.`;
   try{
     const d=await sample.json(prompt,{images:[photoBlob],modelTier:'quick'});
     let filled=[];
     if(d&&typeof d==='object'){
-      if(d.shop&&!$('fShop').value){$('fShop').value=d.shop;filled.push('shop');if(!statusTouched)setStatusFields({shop:d.shop})}
+      if(d.shop&&!$('fShop').value){$('fShop').value=d.shop;filled.push('shop')}
+      if(d.kind&&KINDS[d.kind]&&!$('fKind').value){$('fKind').value=d.kind;filled.push('type')}
+      syncEligibility(statusTouched);
       if(d.offer){$('fOffer').value=d.offer;filled.push('offer')}
       if(d.expires&&/^\d{4}-\d{2}-\d{2}$/.test(d.expires)){$('fExp').value=d.expires;filled.push('date')}
       if(d.card_ending&&!$('fCard').value){$('fCard').value=String(d.card_ending).replace(/\D/g,'').slice(-4);filled.push('card')}
+      {const known=new Set(vouchers.filter(x=>x.mine===true&&x.card).map(x=>x.card)),c=$('fCard').value;
+       if(c&&known.size&&!known.has(c)){$('fMine').checked=false;syncEligibility(statusTouched);setStatus('warn','This voucher is tied to a card ending '+esc(c)+', which isn\'t one you\'ve used before. Only tick "It\'s mine" if it is your card.')}}
       if(d.conditions&&!$('fNotes').value){$('fNotes').value=d.conditions;filled.push('conditions')}
       const decoded=$('fCode').value.trim();
       if(d.code){const c=String(d.code).replace(/\s/g,'');
@@ -793,13 +869,34 @@ $('form').addEventListener('submit',async ev=>{
   err.hidden=true;
   const v=Object.assign({},draft,{code,format:$('fFormat').value,shop:$('fShop').value.trim(),expires:$('fExp').value||null,offer:$('fOffer').value.trim(),
     card:$('fCard').value.replace(/\D/g,'').slice(-4),notes:$('fNotes').value.trim(),updatedAt:Date.now(),
-    tillStatus:(document.querySelector('#fStatus input:checked')||{}).value||shopRec($('fShop').value).status,
+    kind:$('fKind').value||null,mine:$('fMine').checked,termsChecked:$('fTerms').checked,
+    tillStatus:(document.querySelector('#fStatus input:checked:not(:disabled)')||{}).value||'remind',
     needsCard:$('fNeedsCard').checked,cardName:$('fCardName').value.trim()||null});
+  if(draft.expires!==v.expires&&v.reminder){v.reminder=null}
   const btns=[...document.querySelectorAll('#form [type=submit]')];btns.forEach(b=>b.disabled=true);
-  try{await persist(v);closeEditor();toast('Voucher saved');setTab(status(v).old?'old':'live')}
+  const isNew=!vouchers.some(x=>x.id===v.id);
+  try{await persist(v);closeEditor();toast('Voucher saved');setTab(status(v).old?'old':'live');
+    if(!status(v).old&&v.expires&&(isNew||!v.reminder)){for(let i=0;i<30&&!vouchers.some(x=>x.id===v.id);i++)await new Promise(r=>setTimeout(r,100));
+      if(vouchers.some(x=>x.id===v.id)){openDetail(v.id);$('dRemindBtn').click()}}}
   catch(e){err.textContent=errText(e);err.hidden=false}
   finally{btns.forEach(b=>b.disabled=false)}
 });
+
+/* ---------- backup and restore (joint plan: one tap, James's choice) ---------- */
+$('bkBtn').onclick=async()=>{const at=new Date().toISOString();
+  const data={app:'Till Ready',version:1,exportedAt:at,vouchers,shops:shopRecs};
+  const a=document.createElement('a');a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(data));a.download='till-ready-backup-'+todayISO()+'.json';document.body.appendChild(a);a.click();a.remove();
+  try{if(mode==='db'&&metaCol)await metaCol.doc('backup').set({at});else localStorage.setItem('tillready.lastBackup',at);lastBackup=at;footNote();toast('Backup saved to your Downloads. Keep it private')}
+  catch(e){toast('Backup downloaded, but the date wasn’t recorded')}};
+$('rsFile').addEventListener('change',async()=>{const f=$('rsFile').files&&$('rsFile').files[0];$('rsFile').value='';if(!f)return;
+  let d;try{d=JSON.parse(await f.text())}catch(e){toast('That isn’t a Till Ready backup file');return}
+  if(!d||d.app!=='Till Ready'||!Array.isArray(d.vouchers)){toast('That isn’t a Till Ready backup file');return}
+  let added=0,kept=0,bad=0;
+  for(const v of d.vouchers){if(!v||typeof v.id!=='string'||typeof v.code!=='string'){bad++;continue}
+    if(vouchers.some(x=>x.id===v.id)){kept++;continue}
+    try{await persist(v);added++}catch(e){bad++}}
+  for(const [k,r] of Object.entries(d.shops||{})){if(!shopRecs[k]&&r&&r.name&&r.kind){try{await saveShop(r.name,r.kind,r)}catch(e){}}}
+  toast(`Restored ${added}. ${kept} already here (kept yours).`+(bad?` ${bad} skipped.`:''))});
 
 /* ---------- entry points ---------- */
 function fromInput(inp,inEditor){inp.addEventListener('change',()=>{const f=inp.files&&inp.files[0];inp.value='';if(!f)return;if(inEditor)handlePhoto(f);else openEditor(null,f)})}
@@ -807,6 +904,8 @@ fromInput($('cam'),false); fromInput($('pick'),false); fromInput($('cam2'),true)
 $('manualBtn').onclick=()=>openEditor(null);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('editor').hidden)closeEditor();else if(!$('detail').hidden)closeDetail()}});
 
+/* Test hook: only present when the test harness sets window.__tillTest before load. */
+if(window.__tillTest) window.__tr={get vouchers(){return vouchers},persist,tillStatus,reminderSlots,todayISO};
 render(); $('summary').textContent='Loading your vouchers…';
 initStore();
 })();
